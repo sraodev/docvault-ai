@@ -9,6 +9,19 @@ function cn(...inputs: (string | undefined | null | false)[]) {
     return twMerge(clsx(inputs))
 }
 
+/**
+ * Extracts filename from a file path, handling both Unix (/) and Windows (\) path separators.
+ * @param filePath - The file path (e.g., "uploads/file.pdf" or "uploads\file.pdf")
+ * @returns The filename portion of the path
+ */
+function extractFilename(filePath: string): string {
+    if (!filePath) return ''
+    // Normalize path separators: replace backslashes with forward slashes for cross-platform compatibility
+    const normalizedPath = filePath.replace(/\\/g, '/')
+    // Extract the last segment after the final separator
+    return normalizedPath.split('/').pop() || ''
+}
+
 interface DocumentViewerProps {
     document: Document | null
 }
@@ -26,7 +39,7 @@ export function DocumentViewer({ document }: DocumentViewerProps) {
     const fetchMarkdown = async (doc: Document) => {
         if (!doc.markdown_path) return
         try {
-            const filename = doc.markdown_path.split('/').pop()
+            const filename = extractFilename(doc.markdown_path)
             if (!filename) return
 
             const content = await api.getFileContent(filename)
@@ -77,7 +90,7 @@ export function DocumentViewer({ document }: DocumentViewerProps) {
                             <p>Original File Content</p>
                             {document.file_path ? (
                                 <a
-                                    href={`${api.getApiUrl()}/files/${document.file_path.split('/').pop()}`}
+                                    href={`${api.getApiUrl()}/files/${extractFilename(document.file_path)}`}
                                     target="_blank"
                                     rel="noreferrer"
                                     className="mt-4 text-indigo-600 hover:underline text-sm"
