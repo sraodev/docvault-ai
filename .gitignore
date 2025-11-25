@@ -30,3 +30,5 @@ node_modules/
 dist/
 .DS_Store
 coverage/
+backend/app/core/anthropic-key
+backend/app/core/openrouterkey
