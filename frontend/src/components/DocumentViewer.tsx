@@ -75,14 +75,18 @@ export function DocumentViewer({ document }: DocumentViewerProps) {
                         <div className="h-full flex flex-col items-center justify-center text-slate-400">
                             <File className="w-16 h-16 mb-4 opacity-20" />
                             <p>Original File Content</p>
-                            <a
-                                href={`${api.getApiUrl()}/files/${document.filename}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="mt-4 text-indigo-600 hover:underline text-sm"
-                            >
-                                Open/Download Original File
-                            </a>
+                            {document.file_path ? (
+                                <a
+                                    href={`${api.getApiUrl()}/files/${document.file_path.split('/').pop()}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="mt-4 text-indigo-600 hover:underline text-sm"
+                                >
+                                    Open/Download Original File
+                                </a>
+                            ) : (
+                                <span className="mt-4 text-xs text-slate-400">File path not available</span>
+                            )}
                         </div>
                     )}
 
