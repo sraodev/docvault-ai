@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { FileText, File, Loader2 } from 'lucide-react'
+import { FileText, File, Loader2, ChevronRight, Home, Folder } from 'lucide-react'
 import { clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import { Document } from '../types'
@@ -64,6 +64,30 @@ export function DocumentViewer({ document }: DocumentViewerProps) {
 
     return (
         <div className="flex-1 flex flex-col h-full overflow-hidden">
+            {/* Breadcrumbs */}
+            <div className="px-6 py-3 bg-slate-50 border-b border-slate-200">
+                <nav className="flex items-center gap-2 text-sm">
+                    <button className="flex items-center gap-1 text-slate-500 hover:text-slate-700 transition-colors">
+                        <Home className="w-4 h-4" />
+                        <span>Documents</span>
+                    </button>
+                    {document.folder && (
+                        <>
+                            <ChevronRight className="w-4 h-4 text-slate-400" />
+                            <button className="flex items-center gap-1 text-slate-500 hover:text-slate-700 transition-colors">
+                                <Folder className="w-4 h-4" />
+                                <span className="truncate max-w-[200px]">{document.folder}</span>
+                            </button>
+                        </>
+                    )}
+                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                    <span className="flex items-center gap-1 text-slate-900 font-medium truncate max-w-[300px]">
+                        <File className="w-4 h-4 shrink-0" />
+                        <span className="truncate" title={document.filename}>{document.filename}</span>
+                    </span>
+                </nav>
+            </div>
+
             <div className="h-16 border-b border-slate-200 bg-white flex items-center justify-between px-6">
                 <div className="flex items-center gap-3 overflow-hidden">
                     <h2 className="font-semibold text-lg truncate">{document.filename}</h2>
