@@ -32,11 +32,11 @@ export function useDocuments() {
         return () => clearInterval(interval)
     }, [fetchDocuments])
 
-    const handleUpload = async (files: FileList) => {
+    const handleUpload = async (files: FileList, folder?: string) => {
         setIsUploading(true)
         setUploadError(null)
         try {
-            await api.uploadFiles(files)
+            await api.uploadFiles(files, folder)
             await fetchDocuments()
         } catch (err) {
             console.error("Upload failed", err)

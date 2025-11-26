@@ -1,5 +1,5 @@
-from fastapi import APIRouter, UploadFile, File, BackgroundTasks, HTTPException
-from typing import List, Dict
+from fastapi import APIRouter, UploadFile, File, BackgroundTasks, HTTPException, Form
+from typing import List, Dict, Optional
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -51,7 +51,15 @@ def process_document_background(doc_id: str, file_path: Path):
             documents_db[doc_id]["status"] = "failed"
 
 @router.post("/upload", response_model=DocumentMetadata)
-async def upload_file(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+async def upload_file(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    folder: Optional[str] = Form(None)
+):
+    """
+    Upload a document with optional folder/category assignment.
+    Folder is stored as metadata for virtual folder organization.
+    """
     try:
         doc_id = str(uuid.uuid4())
         file_ext = Path(file.filename).suffix
@@ -61,6 +69,9 @@ async def upload_file(background_tasks: BackgroundTasks, file: UploadFile = File
         # Save file
         file_service.save_upload(file, save_path)
 
+        # Normalize folder name (trim whitespace, use None for empty strings)
+        normalized_folder = folder.strip() if folder and folder.strip() else None
+
         doc_meta = {
             "id": doc_id,
             "filename": file.filename,
@@ -68,7 +79,8 @@ async def upload_file(background_tasks: BackgroundTasks, file: UploadFile = File
             "file_path": str(save_path),
             "status": "processing",
             "summary": None,
-            "markdown_path": None
+            "markdown_path": None,
+            "folder": normalized_folder  # Store folder as metadata
         }
         
         documents_db[doc_id] = doc_meta
@@ -84,8 +96,26 @@ async def upload_file(background_tasks: BackgroundTasks, file: UploadFile = File
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 @router.get("/documents", response_model=List[DocumentMetadata])
-async def get_documents():
+async def get_documents(folder: Optional[str] = None):
+    """
+    Get all documents, optionally filtered by folder.
+    """
+    if folder:
+        return [doc for doc in documents_db.values() if doc.get("folder") == folder]
     return list(documents_db.values())
+
+@router.get("/documents/folders/list")
+async def get_folders():
+    """
+    Get list of all available folders/categories.
+    Returns unique folder names from all documents.
+    """
+    folders = set()
+    for doc in documents_db.values():
+        folder = doc.get("folder")
+        if folder:
+            folders.add(folder)
+    return {"folders": sorted(list(folders))}
 
 @router.get("/documents/{doc_id}", response_model=DocumentMetadata)
 async def get_document(doc_id: str):

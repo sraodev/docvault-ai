@@ -1,4 +1,4 @@
-import { File, Trash2 } from 'lucide-react'
+import { File, Trash2, Folder } from 'lucide-react'
 import { clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import { Document } from '../types'
@@ -47,7 +47,12 @@ export function DocumentList({ documents, selectedDocId, onSelect, onDelete }: D
                             <File className="w-5 h-5" />
                         </div>
                         <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{doc.filename}</p>
+                            <p 
+                                className="text-sm font-medium break-words text-slate-900" 
+                                title={doc.filename}
+                            >
+                                {doc.filename}
+                            </p>
                             <div className="flex items-center gap-2 mt-1 flex-wrap">
                                 <span className={cn(
                                     "w-2 h-2 rounded-full shrink-0",
@@ -58,6 +63,12 @@ export function DocumentList({ documents, selectedDocId, onSelect, onDelete }: D
                                 <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200 uppercase shrink-0">
                                     {getFileType(doc.filename)}
                                 </span>
+                                {doc.folder && (
+                                    <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-700 border border-indigo-200 flex items-center gap-1 shrink-0">
+                                        <Folder className="w-3 h-3" />
+                                        {doc.folder}
+                                    </span>
+                                )}
                             </div>
                         </div>
                         <div

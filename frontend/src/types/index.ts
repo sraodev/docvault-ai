@@ -6,4 +6,5 @@ export interface Document {
     status: 'processing' | 'completed' | 'failed'
     summary?: string
     markdown_path?: string
+    folder?: string  // Virtual folder/category for organization
 }

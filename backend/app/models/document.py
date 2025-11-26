@@ -9,3 +9,4 @@ class DocumentMetadata(BaseModel):
     summary: Optional[str] = None
     markdown_path: Optional[str] = None
     status: str = "processing" # processing, completed, failed
+    folder: Optional[str] = None  # Virtual folder/category for organization
