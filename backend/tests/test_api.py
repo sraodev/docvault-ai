@@ -1,16 +1,20 @@
 import os
+import sys
+from pathlib import Path
+
+# Add the backend directory to sys.path
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+
 from dotenv import load_dotenv
 from app.services.ai_service import AIService
-from app.core.config import AI_PROVIDER
+from app.core.config import OPENROUTER_API_KEY
 
 # Load env vars explicitly to be sure
 load_dotenv()
 
-print(f"Current Provider: {AI_PROVIDER}")
+print(f"OpenRouter Key present: {bool(OPENROUTER_API_KEY)}")
 
 service = AIService()
-print(f"Service Provider Class: {service.provider.__class__.__name__}")
-
 print("Attempting to generate summary...")
 try:
     summary = service.generate_summary("This is a test document content that is long enough to be summarized.")

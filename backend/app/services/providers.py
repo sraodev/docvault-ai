@@ -37,7 +37,7 @@ class OpenRouterProvider(AIProvider):
             response = self.client.chat.completions.create(
                 model="anthropic/claude-3-haiku",
                 messages=[
-                    {"role": "user", "content": f"Please provide a concise summary of the following document:\n\n{text[:10000]}"}
+                    {"role": "user", "content": f"Please provide a concise summary of the following document. Do not include any preamble like 'Here is a summary'. Just provide the summary directly:\n\n{text[:10000]}"}
                 ],
                 max_tokens=300
             )
@@ -54,7 +54,7 @@ class OpenRouterProvider(AIProvider):
             response = self.client.chat.completions.create(
                 model="anthropic/claude-3-haiku",
                 messages=[
-                    {"role": "user", "content": f"Convert the following document content into clean, well-structured Markdown. Do not include any preamble, just the markdown:\n\n{text[:15000]}"}
+                    {"role": "user", "content": f"Convert the following document content into clean, well-structured Markdown. Do not include any preamble or explanation, just the markdown content:\n\n{text[:15000]}"}
                 ],
                 max_tokens=2000
             )
@@ -80,7 +80,7 @@ class AnthropicProvider(AIProvider):
                 model="claude-3-haiku-20240307",
                 max_tokens=300,
                 messages=[
-                    {"role": "user", "content": f"Please provide a concise summary of the following document:\n\n{text[:10000]}"}
+                    {"role": "user", "content": f"Please provide a concise summary of the following document. Do not include any preamble like 'Here is a summary'. Just provide the summary directly:\n\n{text[:10000]}"}
                 ]
             )
             return message.content[0].text
@@ -97,7 +97,7 @@ class AnthropicProvider(AIProvider):
                 model="claude-3-haiku-20240307",
                 max_tokens=2000,
                 messages=[
-                    {"role": "user", "content": f"Convert the following document content into clean, well-structured Markdown. Do not include any preamble, just the markdown:\n\n{text[:15000]}"}
+                    {"role": "user", "content": f"Convert the following document content into clean, well-structured Markdown. Do not include any preamble or explanation, just the markdown content:\n\n{text[:15000]}"}
                 ]
             )
             return message.content[0].text

@@ -65,7 +65,12 @@ export function DocumentViewer({ document }: DocumentViewerProps) {
     return (
         <div className="flex-1 flex flex-col h-full overflow-hidden">
             <div className="h-16 border-b border-slate-200 bg-white flex items-center justify-between px-6">
-                <h2 className="font-semibold text-lg truncate">{document.filename}</h2>
+                <div className="flex items-center gap-3 overflow-hidden">
+                    <h2 className="font-semibold text-lg truncate">{document.filename}</h2>
+                    <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200 uppercase shrink-0">
+                        {extractFilename(document.filename).split('.').pop() || 'FILE'}
+                    </span>
+                </div>
                 <div className="flex bg-slate-100 p-1 rounded-lg">
                     {(['original', 'summary', 'markdown'] as const).map((tab) => (
                         <button

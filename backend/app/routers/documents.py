@@ -52,30 +52,36 @@ def process_document_background(doc_id: str, file_path: Path):
 
 @router.post("/upload", response_model=DocumentMetadata)
 async def upload_file(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
-    doc_id = str(uuid.uuid4())
-    file_ext = Path(file.filename).suffix
-    save_filename = f"{doc_id}{file_ext}"
-    save_path = UPLOAD_DIR / save_filename
+    try:
+        doc_id = str(uuid.uuid4())
+        file_ext = Path(file.filename).suffix
+        save_filename = f"{doc_id}{file_ext}"
+        save_path = UPLOAD_DIR / save_filename
 
-    # Save file
-    file_service.save_upload(file, save_path)
+        # Save file
+        file_service.save_upload(file, save_path)
 
-    doc_meta = {
-        "id": doc_id,
-        "filename": file.filename,
-        "upload_date": datetime.now().isoformat(),
-        "file_path": str(save_path),
-        "status": "processing",
-        "summary": None,
-        "markdown_path": None
-    }
-    
-    documents_db[doc_id] = doc_meta
+        doc_meta = {
+            "id": doc_id,
+            "filename": file.filename,
+            "upload_date": datetime.now().isoformat(),
+            "file_path": str(save_path),
+            "status": "processing",
+            "summary": None,
+            "markdown_path": None
+        }
+        
+        documents_db[doc_id] = doc_meta
 
-    # Trigger background processing
-    background_tasks.add_task(process_document_background, doc_id, save_path)
+        # Trigger background processing
+        background_tasks.add_task(process_document_background, doc_id, save_path)
 
-    return doc_meta
+        return doc_meta
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in upload_file: {e}")
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 @router.get("/documents", response_model=List[DocumentMetadata])
 async def get_documents():
@@ -99,17 +105,23 @@ async def delete_document(doc_id: str):
     if doc_id not in documents_db:
         raise HTTPException(status_code=404, detail="Document not found")
     
-    doc = documents_db[doc_id]
-    
-    # Delete original file
-    if doc.get("file_path"):
-        file_service.delete_file(Path(doc["file_path"]))
+    try:
+        doc = documents_db[doc_id]
         
-    # Delete markdown file
-    if doc.get("markdown_path"):
-        file_service.delete_file(Path(doc["markdown_path"]))
+        # Delete original file
+        if doc.get("file_path"):
+            file_service.delete_file(Path(doc["file_path"]))
+            
+        # Delete markdown file
+        if doc.get("markdown_path"):
+            file_service.delete_file(Path(doc["markdown_path"]))
+            
+        # Remove from DB
+        del documents_db[doc_id]
         
-    # Remove from DB
-    del documents_db[doc_id]
-    
-    return {"message": "Document deleted successfully"}
+        return {"message": "Document deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error deleting document {doc_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Deletion failed: {str(e)}")

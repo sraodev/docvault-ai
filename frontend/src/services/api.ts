@@ -5,31 +5,56 @@ const API_URL = 'http://localhost:8000'
 
 export const api = {
     getDocuments: async (): Promise<Document[]> => {
-        const res = await axios.get(`${API_URL}/documents`)
-        return res.data
+        try {
+            const res = await axios.get(`${API_URL}/documents`)
+            return res.data
+        } catch (error) {
+            console.error("Error fetching documents:", error)
+            throw new Error("Failed to fetch documents. Please try again later.")
+        }
     },
 
     getDocument: async (id: string): Promise<Document> => {
-        const res = await axios.get(`${API_URL}/documents/${id}`)
-        return res.data
+        try {
+            const res = await axios.get(`${API_URL}/documents/${id}`)
+            return res.data
+        } catch (error) {
+            console.error(`Error fetching document ${id}:`, error)
+            throw new Error("Failed to load document details.")
+        }
     },
 
     deleteDocument: async (id: string): Promise<void> => {
-        await axios.delete(`${API_URL}/documents/${id}`)
+        try {
+            await axios.delete(`${API_URL}/documents/${id}`)
+        } catch (error) {
+            console.error(`Error deleting document ${id}:`, error)
+            throw new Error("Failed to delete document.")
+        }
     },
 
     uploadFiles: async (files: FileList): Promise<void> => {
-        const fileArray = Array.from(files)
-        for (const file of fileArray) {
-            const formData = new FormData()
-            formData.append('file', file)
-            await axios.post(`${API_URL}/upload`, formData)
+        try {
+            const fileArray = Array.from(files)
+            for (const file of fileArray) {
+                const formData = new FormData()
+                formData.append('file', file)
+                await axios.post(`${API_URL}/upload`, formData)
+            }
+        } catch (error) {
+            console.error("Error uploading files:", error)
+            throw new Error("Failed to upload files. Please check your connection and try again.")
         }
     },
 
     getFileContent: async (filename: string): Promise<string> => {
-        const res = await axios.get(`${API_URL}/files/${filename}`)
-        return res.data
+        try {
+            const res = await axios.get(`${API_URL}/files/${filename}`)
+            return res.data
+        } catch (error) {
+            console.error(`Error fetching file content ${filename}:`, error)
+            throw new Error("Failed to load file content.")
+        }
     },
 
     getApiUrl: () => API_URL
