@@ -9,12 +9,11 @@ class AIService:
             return self.provider.generate_summary(text)
         except Exception as e:
             print(f"AI Service Error: {e}")
-            # Fallback to mock if provider fails? Or just return error message
-            return "Error generating summary via AI."
+            return f"Error generating summary: {str(e)}"
 
     def generate_markdown(self, text: str) -> str:
         try:
             return self.provider.generate_markdown(text)
         except Exception as e:
             print(f"AI Service Error: {e}")
-            return f"# Error\nCould not generate markdown. \n\nOriginal content preview:\n{text[:500]}"
+            return f"# Error\nCould not generate markdown. Error: {str(e)}\n\nOriginal content preview:\n{text[:500]}"
