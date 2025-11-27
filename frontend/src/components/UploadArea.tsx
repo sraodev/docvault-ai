@@ -1,46 +1,20 @@
-import { useState, useEffect } from 'react'
-import { Upload, Loader2, AlertCircle, Folder } from 'lucide-react'
+import { useState } from 'react'
+import { Upload, Loader2, AlertCircle } from 'lucide-react'
 import { clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
-import { api } from '../services/api'
 
 function cn(...inputs: (string | undefined | null | false)[]) {
     return twMerge(clsx(inputs))
 }
 
 interface UploadAreaProps {
-    onUpload: (files: FileList, folder?: string) => Promise<void>
+    onUpload: (files: FileList, folder?: string | ((file: File) => string | undefined)) => Promise<void>
     isUploading: boolean
     error: string | null
 }
 
 export function UploadArea({ onUpload, isUploading, error }: UploadAreaProps) {
     const [isDragging, setIsDragging] = useState(false)
-    const [selectedFolder, setSelectedFolder] = useState<string>('')
-    const [availableFolders, setAvailableFolders] = useState<string[]>([])
-    const [newFolderName, setNewFolderName] = useState('')
-    const [showNewFolderInput, setShowNewFolderInput] = useState(false)
-
-    useEffect(() => {
-        loadFolders()
-    }, [])
-
-    const loadFolders = async () => {
-        try {
-            const response = await api.getFolders()
-            setAvailableFolders(response.folders)
-        } catch (err) {
-            console.error("Failed to load folders", err)
-        }
-    }
-
-    const handleCreateFolder = () => {
-        if (newFolderName.trim()) {
-            setSelectedFolder(newFolderName.trim())
-            setNewFolderName('')
-            setShowNewFolderInput(false)
-        }
-    }
 
     const onDragOver = (e: React.DragEvent) => {
         e.preventDefault()
@@ -56,118 +30,81 @@ export function UploadArea({ onUpload, isUploading, error }: UploadAreaProps) {
         e.preventDefault()
         setIsDragging(false)
         if (e.dataTransfer.files?.length) {
-            await onUpload(e.dataTransfer.files, selectedFolder || undefined)
-            // Reload folders after upload in case a new folder was created
-            await loadFolders()
+            const files = Array.from(e.dataTransfer.files)
+
+            // Check if any file has webkitRelativePath (indicates folder drag & drop)
+            const hasFolderStructure = files.some(file => (file as any).webkitRelativePath)
+
+            if (hasFolderStructure) {
+                // Extract folder path from each file's webkitRelativePath
+                const getFolderPath = (file: File): string | undefined => {
+                    const relativePath = (file as any).webkitRelativePath
+
+                    if (!relativePath) {
+                        return undefined
+                    }
+
+                    const pathParts = relativePath.split('/')
+
+                    if (pathParts.length > 1) {
+                        // Remove the filename to get the folder path
+                        const folderPath = pathParts.slice(0, -1).join('/')
+                        return folderPath || undefined
+                    }
+                    // File is in root of selected folder
+                    return undefined
+                }
+
+                // Upload files with folder structure preserved
+                await onUpload(e.dataTransfer.files, getFolderPath)
+            } else {
+                // Regular file upload (no folder structure)
+                await onUpload(e.dataTransfer.files)
+            }
         }
     }
 
     const handleFileInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files?.length) {
-            await onUpload(e.target.files, selectedFolder || undefined)
-            // Reload folders after upload in case a new folder was created
-            await loadFolders()
+            await onUpload(e.target.files)
         }
     }
 
     return (
         <div className="p-4">
-            {/* Folder Selection */}
-            <div className="mb-3">
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5 flex items-center gap-1">
-                    <Folder className="w-3 h-3" />
-                    Folder (Optional)
-                </label>
-                <div className="flex gap-2">
-                    <select
-                        value={selectedFolder}
-                        onChange={(e) => setSelectedFolder(e.target.value)}
-                        className="flex-1 px-3 py-1.5 text-sm border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        disabled={isUploading}
-                    >
-                        <option value="">No Folder</option>
-                        {availableFolders.map((folder) => (
-                            <option key={folder} value={folder}>
-                                {folder}
-                            </option>
-                        ))}
-                    </select>
-                    {!showNewFolderInput ? (
-                        <button
-                            type="button"
-                            onClick={() => setShowNewFolderInput(true)}
-                            className="px-3 py-1.5 text-xs text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg border border-indigo-200 transition-colors"
-                            disabled={isUploading}
-                        >
-                            + New
-                        </button>
-                    ) : (
-                        <div className="flex gap-1">
-                            <input
-                                type="text"
-                                value={newFolderName}
-                                onChange={(e) => setNewFolderName(e.target.value)}
-                                onKeyPress={(e) => e.key === 'Enter' && handleCreateFolder()}
-                                placeholder="Folder name"
-                                className="px-2 py-1.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 w-32"
-                                autoFocus
-                            />
-                            <button
-                                type="button"
-                                onClick={handleCreateFolder}
-                                className="px-2 py-1.5 text-xs bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
-                            >
-                                Add
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setShowNewFolderInput(false)
-                                    setNewFolderName('')
-                                }}
-                                className="px-2 py-1.5 text-xs bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300"
-                            >
-                                Cancel
-                            </button>
-                        </div>
-                    )}
-                </div>
-            </div>
-
             {/* Upload Area */}
             <label
                 onDragOver={onDragOver}
                 onDragLeave={onDragLeave}
                 onDrop={onDrop}
                 className={cn(
-                    "flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition-colors",
-                    isDragging ? "border-indigo-500 bg-indigo-50" : "border-slate-300 bg-slate-50 hover:bg-slate-100"
+                    "flex flex-col items-center justify-center w-full h-24 border-2 border-dashed rounded-lg cursor-pointer transition-colors",
+                    isDragging ? "border-blue-500 bg-blue-50" : "border-slate-300 bg-slate-50 hover:bg-slate-100"
                 )}
             >
-                <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                <div className="flex flex-col items-center justify-center">
                     {isUploading ? (
-                        <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
+                        <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
                     ) : (
                         <>
-                            <Upload className={cn("w-8 h-8 mb-3", isDragging ? "text-indigo-500" : "text-slate-400")} />
-                            <p className="text-sm text-slate-500 font-medium">
-                                {isDragging ? "Drop files here" : "Click or drag to upload"}
+                            <Upload className={cn("w-5 h-5 mb-1", isDragging ? "text-blue-500" : "text-slate-400")} />
+                            <p className="text-xs text-slate-500 font-medium">
+                                {isDragging ? "Drop files" : "Upload files"}
                             </p>
-                            <p className="text-xs text-slate-400 mt-1">PDF, TXT, MD</p>
-                            {selectedFolder && (
-                                <p className="text-xs text-indigo-600 mt-1 font-medium">
-                                    → {selectedFolder}
-                                </p>
-                            )}
                         </>
                     )}
                 </div>
                 <input type="file" className="hidden" multiple onChange={handleFileInput} disabled={isUploading} />
             </label>
             {error && (
-                <div className="mt-2 text-xs text-red-500 flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3" />
-                    {error}
+                <div className={cn(
+                    "mt-2 text-xs flex items-start gap-2 p-2 rounded-lg",
+                    error.includes("already exists") || error.includes("DUPLICATE")
+                        ? "bg-yellow-50 text-yellow-700 border border-yellow-200"
+                        : "bg-red-50 text-red-700 border border-red-200"
+                )}>
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    <span className="flex-1">{error}</span>
                 </div>
             )}
         </div>

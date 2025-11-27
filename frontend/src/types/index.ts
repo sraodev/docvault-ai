@@ -3,8 +3,11 @@ export interface Document {
     filename: string
     upload_date: string
     file_path: string
-    status: 'processing' | 'completed' | 'failed'
+    status: 'uploading' | 'processing' | 'completed' | 'failed'
     summary?: string
     markdown_path?: string
     folder?: string  // Virtual folder/category for organization
+    checksum?: string  // SHA-256 checksum for duplicate detection
+    uploadProgress?: number  // 0-100 for upload progress
+    size?: number  // File size in bytes
 }

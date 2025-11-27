@@ -33,19 +33,67 @@ export const api = {
         }
     },
 
-    uploadFiles: async (files: FileList, folder?: string): Promise<void> => {
+    checkDuplicate: async (checksum: string): Promise<{ is_duplicate: boolean; filename?: string; document_id?: string }> => {
+        try {
+            const formData = new FormData()
+            formData.append('checksum', checksum)
+            const res = await axios.post(`${API_URL}/upload/check-duplicate`, formData)
+            return res.data
+        } catch (error) {
+            console.error("Error checking duplicate:", error)
+            return { is_duplicate: false }
+        }
+    },
+
+    uploadFiles: async (
+        files: FileList,
+        folder?: string | ((file: File) => string | undefined),
+        onProgress?: (fileId: string, progress: number) => void
+    ): Promise<Document[]> => {
         try {
             const fileArray = Array.from(files)
+            const uploadedDocs: Document[] = []
+
             for (const file of fileArray) {
                 const formData = new FormData()
                 formData.append('file', file)
-                if (folder) {
-                    formData.append('folder', folder)
+
+                // Handle folder: can be a string or a function that returns folder path per file
+                let fileFolder: string | undefined
+                if (typeof folder === 'function') {
+                    fileFolder = folder(file)
+                } else {
+                    fileFolder = folder
                 }
-                await axios.post(`${API_URL}/upload`, formData)
+
+                if (fileFolder) {
+                    formData.append('folder', fileFolder)
+                }
+
+                const response = await axios.post<Document>(`${API_URL}/upload`, formData, {
+                    onUploadProgress: (progressEvent) => {
+                        if (progressEvent.total && onProgress) {
+                            const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+                            // Use filename as temporary ID until we get the response
+                            onProgress(file.name, progress)
+                        }
+                    }
+                })
+
+                uploadedDocs.push(response.data)
+                // Notify 100% completion
+                if (onProgress) {
+                    onProgress(response.data.id, 100)
+                }
             }
-        } catch (error) {
+
+            return uploadedDocs
+        } catch (error: any) {
             console.error("Error uploading files:", error)
+            // Handle duplicate file error
+            if (error.response?.status === 409 && error.response?.data?.error === 'duplicate_file') {
+                throw new Error(`DUPLICATE: ${error.response.data.message}`)
+            }
             throw new Error("Failed to upload files. Please check your connection and try again.")
         }
     },

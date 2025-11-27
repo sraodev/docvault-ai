@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { Sidebar } from './components/Sidebar'
+import { DriveView } from './components/DriveView'
 import { DocumentViewer } from './components/DocumentViewer'
 import { useDocuments } from './hooks/useDocuments'
 
@@ -10,22 +12,48 @@ function App() {
     isUploading,
     uploadError,
     handleUpload,
-    handleDelete
+    handleDelete,
+    uploadProgress
   } = useDocuments()
 
+  const [showViewer, setShowViewer] = useState(false)
+
+  const handleSelect = (doc: any) => {
+    setSelectedDoc(doc)
+    setShowViewer(true)
+  }
+
   return (
-    <div className="flex h-screen bg-slate-50 font-sans text-slate-900">
+    <div className="flex h-screen bg-white font-sans text-slate-900">
       <Sidebar
         documents={documents}
         selectedDocId={selectedDoc?.id}
-        onSelect={setSelectedDoc}
+        onSelect={handleSelect}
         onDelete={handleDelete}
         onUpload={handleUpload}
         isUploading={isUploading}
         uploadError={uploadError}
+        uploadProgress={uploadProgress}
       />
 
-      <DocumentViewer document={selectedDoc} />
+      {showViewer && selectedDoc ? (
+        <DocumentViewer
+          document={selectedDoc}
+          onClose={() => {
+            setShowViewer(false)
+            setSelectedDoc(null)
+          }}
+        />
+      ) : (
+        <DriveView
+          documents={documents}
+          selectedDocId={selectedDoc?.id}
+          onSelect={handleSelect}
+          onDelete={handleDelete}
+          onUpload={handleUpload}
+          uploadProgress={uploadProgress}
+        />
+      )}
     </div>
   )
 }

@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from fastapi.responses import FileResponse
+import hashlib
 
 from ..models.document import DocumentMetadata
 from ..services.ai_service import AIService
@@ -17,6 +18,21 @@ documents_db: Dict[str, dict] = {}
 
 ai_service = AIService()
 file_service = FileService()
+
+def calculate_file_checksum(file_path: Path) -> str:
+    """Calculate SHA-256 checksum of a file"""
+    sha256_hash = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for byte_block in iter(lambda: f.read(4096), b""):
+            sha256_hash.update(byte_block)
+    return sha256_hash.hexdigest()
+
+def check_duplicate_by_checksum(checksum: str) -> Optional[dict]:
+    """Check if a file with the same checksum already exists"""
+    for doc_id, doc in documents_db.items():
+        if doc.get("checksum") == checksum:
+            return doc
+    return None
 
 def process_document_background(doc_id: str, file_path: Path):
     """
@@ -54,11 +70,13 @@ def process_document_background(doc_id: str, file_path: Path):
 async def upload_file(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    folder: Optional[str] = Form(None)
+    folder: Optional[str] = Form(None),
+    checksum: Optional[str] = Form(None)
 ):
     """
     Upload a document with optional folder/category assignment.
     Folder is stored as metadata for virtual folder organization.
+    Checks duplicate files by checksum if provided.
     """
     try:
         doc_id = str(uuid.uuid4())
@@ -66,8 +84,24 @@ async def upload_file(
         save_filename = f"{doc_id}{file_ext}"
         save_path = UPLOAD_DIR / save_filename
 
-        # Save file
+        # Save file first to calculate checksum
         file_service.save_upload(file, save_path)
+        
+        # Get file size
+        file_size = save_path.stat().st_size
+        
+        # Calculate checksum
+        file_checksum = checksum or calculate_file_checksum(save_path)
+        
+        # Check for duplicate
+        duplicate_doc = check_duplicate_by_checksum(file_checksum)
+        if duplicate_doc:
+            # Delete the just uploaded file since it's a duplicate
+            file_service.delete_file(save_path)
+            raise HTTPException(
+                status_code=409,
+                detail=f"File '{file.filename}' already exists as '{duplicate_doc['filename']}'"
+            )
 
         # Normalize folder name (trim whitespace, use None for empty strings)
         normalized_folder = folder.strip() if folder and folder.strip() else None
@@ -80,7 +114,9 @@ async def upload_file(
             "status": "processing",
             "summary": None,
             "markdown_path": None,
-            "folder": normalized_folder  # Store folder as metadata
+            "folder": normalized_folder,
+            "checksum": file_checksum,
+            "size": file_size
         }
         
         documents_db[doc_id] = doc_meta
@@ -95,14 +131,60 @@ async def upload_file(
         print(f"Error in upload_file: {e}")
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
+@router.post("/upload/check-duplicate")
+async def check_duplicate(checksum: str = Form(...)):
+    """
+    Check if a file with the given checksum already exists.
+    """
+    duplicate_doc = check_duplicate_by_checksum(checksum)
+    if duplicate_doc:
+        return {
+            "is_duplicate": True,
+            "document_id": duplicate_doc["id"],
+            "filename": duplicate_doc["filename"]
+        }
+    return {"is_duplicate": False}
+
+@router.post("/upload/check-duplicates")
+async def check_duplicates(checksums: List[str] = Form(...)):
+    """
+    Check multiple checksums at once for duplicates.
+    """
+    duplicates = []
+    for checksum in checksums:
+        duplicate_doc = check_duplicate_by_checksum(checksum)
+        if duplicate_doc:
+            duplicates.append({
+                "checksum": checksum,
+                "document_id": duplicate_doc["id"],
+                "filename": duplicate_doc["filename"]
+            })
+    return {"duplicates": duplicates}
+
 @router.get("/documents", response_model=List[DocumentMetadata])
 async def get_documents(folder: Optional[str] = None):
     """
     Get all documents, optionally filtered by folder.
+    Ensures all documents have a size field by calculating it from the file if missing.
     """
+    docs = list(documents_db.values())
+    
+    # Filter by folder if specified
     if folder:
-        return [doc for doc in documents_db.values() if doc.get("folder") == folder]
-    return list(documents_db.values())
+        docs = [doc for doc in docs if doc.get("folder") == folder]
+    
+    # Ensure all documents have size field
+    for doc in docs:
+        if "size" not in doc or doc.get("size") is None:
+            file_path = Path(doc.get("file_path", ""))
+            if file_path.exists():
+                try:
+                    doc["size"] = file_path.stat().st_size
+                except Exception as e:
+                    print(f"Error calculating size for {doc.get('id')}: {e}")
+                    doc["size"] = None
+    
+    return docs
 
 @router.get("/documents/folders/list")
 async def get_folders():
@@ -121,7 +203,20 @@ async def get_folders():
 async def get_document(doc_id: str):
     if doc_id not in documents_db:
         raise HTTPException(status_code=404, detail="Document not found")
-    return documents_db[doc_id]
+    
+    doc = documents_db[doc_id]
+    
+    # Ensure document has size field
+    if "size" not in doc or doc.get("size") is None:
+        file_path = Path(doc.get("file_path", ""))
+        if file_path.exists():
+            try:
+                doc["size"] = file_path.stat().st_size
+            except Exception as e:
+                print(f"Error calculating size for {doc_id}: {e}")
+                doc["size"] = None
+    
+    return doc
 
 @router.get("/files/{filename}")
 async def get_file(filename: str):
