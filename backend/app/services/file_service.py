@@ -27,8 +27,7 @@ class FileService(IFileService):
         """
         self._storage: FileStorageInterface = storage
     
-    @property
-    async def storage(self) -> FileStorageInterface:
+    async def get_storage(self) -> FileStorageInterface:
         """Get storage adapter (lazy initialization)."""
         if self._storage is None:
             self._storage = await self._create_storage()
@@ -67,7 +66,7 @@ class FileService(IFileService):
             destination: Path where file should be stored (relative to storage root)
         """
         try:
-            storage_adapter = await self.storage
+            storage_adapter = await self.get_storage()
             # Convert Path to string for storage adapter
             file_path = str(destination)
             await storage_adapter.save_file(file, file_path)
@@ -89,7 +88,7 @@ class FileService(IFileService):
             Extracted text content
         """
         try:
-            storage_adapter = await self.storage
+            storage_adapter = await self.get_storage()
             file_path_str = str(file_path)
             
             # Check if file exists
@@ -154,7 +153,7 @@ class FileService(IFileService):
             file_path: Storage path of the file to delete
         """
         try:
-            storage_adapter = await self.storage
+            storage_adapter = await self.get_storage()
             file_path_str = str(file_path)
             await storage_adapter.delete_file(file_path_str)
         except Exception as e:
@@ -173,7 +172,7 @@ class FileService(IFileService):
             destination: Storage path where content should be saved
         """
         try:
-            storage_adapter = await self.storage
+            storage_adapter = await self.get_storage()
             file_path = str(destination)
             await storage_adapter.save_text(content, file_path)
         except Exception as e:
@@ -194,6 +193,6 @@ class FileService(IFileService):
         Returns:
             URL string for accessing the file
         """
-        storage_adapter = await self.storage
+        storage_adapter = await self.get_storage()
         file_path_str = str(file_path)
         return await storage_adapter.get_file_url(file_path_str, expires_in=expires_in)

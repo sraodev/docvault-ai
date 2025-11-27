@@ -120,7 +120,7 @@ async def upload_file(
         
         # Get file size and calculate checksum
         # For local storage, we can use stat(); for S3/Supabase, we'll get size from file bytes
-        storage_adapter = await file_service.storage
+        storage_adapter = await file_service.get_storage()
         file_bytes = await storage_adapter.get_file(str(save_path))
         file_size = len(file_bytes)
         
@@ -245,7 +245,7 @@ async def process_single_file_upload_async(
         await file_service.save_upload(file, save_path)
         
         # Get file size and calculate checksum from storage
-        storage_adapter = await file_service.storage
+        storage_adapter = await file_service.get_storage()
         file_bytes = await storage_adapter.get_file(str(save_path))
         file_size = len(file_bytes)
         
@@ -564,7 +564,7 @@ async def get_document(doc_id: str):
 async def get_file(filename: str):
     """Get a file from storage (works with local, S3, or Supabase)."""
     try:
-        storage_adapter = await file_service.storage
+        storage_adapter = await file_service.get_storage()
         file_path = str(UPLOAD_DIR / filename)
         
         # Check if file exists
