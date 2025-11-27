@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { FileText, File, Loader2, ChevronRight, Home, Folder } from 'lucide-react'
+import { FileText, File, Loader2, ChevronRight, Home, Folder, X } from 'lucide-react'
 import { clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import { Document } from '../types'
@@ -9,24 +9,15 @@ function cn(...inputs: (string | undefined | null | false)[]) {
     return twMerge(clsx(inputs))
 }
 
-/**
- * Extracts filename from a file path, handling both Unix (/) and Windows (\) path separators.
- * @param filePath - The file path (e.g., "uploads/file.pdf" or "uploads\file.pdf")
- * @returns The filename portion of the path
- */
-function extractFilename(filePath: string): string {
-    if (!filePath) return ''
-    // Normalize path separators: replace backslashes with forward slashes for cross-platform compatibility
-    const normalizedPath = filePath.replace(/\\/g, '/')
-    // Extract the last segment after the final separator
-    return normalizedPath.split('/').pop() || ''
-}
+import { extractFilename } from '../utils/filename'
 
 interface DocumentViewerProps {
     document: Document | null
+    onClose?: () => void
+    onNavigateToFolder?: (folder: string | null) => void
 }
 
-export function DocumentViewer({ document }: DocumentViewerProps) {
+export function DocumentViewer({ document, onClose, onNavigateToFolder }: DocumentViewerProps) {
     const [activeTab, setActiveTab] = useState<'original' | 'summary' | 'markdown'>('original')
     const [markdownContent, setMarkdownContent] = useState<string>('')
 
@@ -62,35 +53,70 @@ export function DocumentViewer({ document }: DocumentViewerProps) {
         )
     }
 
+    // Build folder breadcrumb path
+    const folderBreadcrumbs = document.folder ? document.folder.split('/') : []
+
     return (
         <div className="flex-1 flex flex-col h-full overflow-hidden">
             {/* Breadcrumbs */}
-            <div className="px-6 py-3 bg-slate-50 border-b border-slate-200">
+            <div className="px-6 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                 <nav className="flex items-center gap-2 text-sm">
-                    <button className="flex items-center gap-1 text-slate-500 hover:text-slate-700 transition-colors">
-                        <Home className="w-4 h-4" />
-                        <span>Documents</span>
-                    </button>
-                    {document.folder && (
-                        <>
-                            <ChevronRight className="w-4 h-4 text-slate-400" />
-                            <button className="flex items-center gap-1 text-slate-500 hover:text-slate-700 transition-colors">
-                                <Folder className="w-4 h-4" />
-                                <span className="truncate max-w-[200px]">{document.folder}</span>
-                            </button>
-                        </>
+                    {onClose ? (
+                        <button
+                            onClick={onClose}
+                            className="flex items-center gap-1 text-slate-500 hover:text-slate-700 transition-colors"
+                        >
+                            <Home className="w-4 h-4" />
+                            <span>Documents</span>
+                        </button>
+                    ) : (
+                        <button className="flex items-center gap-1 text-slate-500 hover:text-slate-700 transition-colors">
+                            <Home className="w-4 h-4" />
+                            <span>Documents</span>
+                        </button>
                     )}
+                    {folderBreadcrumbs.map((folderPart, index) => {
+                        const folderPath = folderBreadcrumbs.slice(0, index + 1).join('/')
+                        return (
+                            <div key={folderPath} className="flex items-center gap-2">
+                                <ChevronRight className="w-4 h-4 text-slate-400" />
+                                {onNavigateToFolder ? (
+                                    <button 
+                                        onClick={() => onNavigateToFolder(folderPath)}
+                                        className="flex items-center gap-1 text-slate-500 hover:text-slate-700 transition-colors"
+                                    >
+                                        {index === 0 && <Folder className="w-4 h-4" />}
+                                        <span className="truncate max-w-[200px]">{folderPart}</span>
+                                    </button>
+                                ) : (
+                                    <span className="flex items-center gap-1 text-slate-500">
+                                        {index === 0 && <Folder className="w-4 h-4" />}
+                                        <span className="truncate max-w-[200px]">{folderPart}</span>
+                                    </span>
+                                )}
+                            </div>
+                        )
+                    })}
                     <ChevronRight className="w-4 h-4 text-slate-400" />
                     <span className="flex items-center gap-1 text-slate-900 font-medium truncate max-w-[300px]">
                         <File className="w-4 h-4 shrink-0" />
-                        <span className="truncate" title={document.filename}>{document.filename}</span>
+                        <span className="truncate" title={document.filename}>{extractFilename(document.filename)}</span>
                     </span>
                 </nav>
+                {onClose && (
+                    <button
+                        onClick={onClose}
+                        className="p-1.5 rounded-full hover:bg-slate-200 transition-colors"
+                        title="Close"
+                    >
+                        <X className="w-4 h-4 text-slate-600" />
+                    </button>
+                )}
             </div>
 
             <div className="h-16 border-b border-slate-200 bg-white flex items-center justify-between px-6">
                 <div className="flex items-center gap-3 overflow-hidden">
-                    <h2 className="font-semibold text-lg truncate">{document.filename}</h2>
+                    <h2 className="font-semibold text-lg truncate">{extractFilename(document.filename)}</h2>
                     <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200 uppercase shrink-0">
                         {extractFilename(document.filename).split('.').pop() || 'FILE'}
                     </span>

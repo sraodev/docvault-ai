@@ -99,15 +99,17 @@ export function useDocuments() {
             const fileFolder = typeof folder === 'function' ? folder(file) : folder
 
             // Add temporary document to list
+            const uploadTime = new Date().toISOString()
             const tempDoc: Document = {
                 id: tempId,
                 filename: file.name,
-                upload_date: new Date().toISOString(),
+                upload_date: uploadTime,
                 file_path: '',
                 status: 'uploading',
                 uploadProgress: 0,
                 folder: fileFolder || undefined,
-                size: file.size
+                size: file.size,
+                modified_date: uploadTime
             }
             setDocuments(prev => [...prev, tempDoc])
         })
@@ -196,6 +198,68 @@ export function useDocuments() {
         }
     }
 
+    /**
+     * Deletes a folder and all its contents (including subfolders).
+     * Shows confirmation dialog before deletion.
+     * 
+     * @param folderPath - The folder path to delete
+     */
+    const handleDeleteFolder = async (folderPath: string) => {
+        // Count all documents in this folder and subfolders
+        const folderDocs = documents.filter(doc => 
+            doc.folder === folderPath || 
+            (doc.folder && doc.folder.startsWith(`${folderPath}/`))
+        )
+        const count = folderDocs.length
+        
+        // Show confirmation dialog with item count
+        if (!window.confirm(`Are you sure you want to delete this folder?\n\nThis will delete ${count} ${count === 1 ? 'item' : 'items'} including all files and subfolders.`)) {
+            return
+        }
+
+        try {
+            await api.deleteFolder(folderPath)
+            
+            // Remove all documents in this folder from state immediately
+            // This provides instant UI feedback before server refresh
+            setDocuments(prev => prev.filter(doc => 
+                doc.folder !== folderPath && 
+                !(doc.folder && doc.folder.startsWith(`${folderPath}/`))
+            ))
+            
+            // Clear selected doc if it was in the deleted folder
+            if (selectedDoc && (selectedDoc.folder === folderPath || (selectedDoc.folder && selectedDoc.folder.startsWith(`${folderPath}/`)))) {
+                setSelectedDoc(null)
+            }
+            
+            // Refresh documents from server to ensure consistency
+            await fetchDocuments()
+        } catch (err: any) {
+            console.error("Delete folder failed", err)
+            const errorMsg = err.response?.data?.detail || err.message || "Failed to delete folder"
+            alert(errorMsg)
+            throw err // Re-throw so caller can handle it
+        }
+    }
+
+    /**
+     * Moves a folder and all its contents to a new location.
+     * 
+     * @param folderPath - The current folder path to move
+     * @param newFolderPath - The destination folder path (null for root)
+     */
+    const handleMoveFolder = async (folderPath: string, newFolderPath: string | null) => {
+        try {
+            await api.moveFolder(folderPath, newFolderPath)
+            // Refresh documents to show updated folder structure
+            await fetchDocuments()
+        } catch (err) {
+            console.error("Move folder failed", err)
+            alert("Failed to move folder")
+            throw err
+        }
+    }
+
     return {
         documents,
         selectedDoc,
@@ -204,6 +268,8 @@ export function useDocuments() {
         uploadError,
         handleUpload,
         handleDelete,
+        handleDeleteFolder,
+        handleMoveFolder,
         isLoading,
         uploadProgress
     }

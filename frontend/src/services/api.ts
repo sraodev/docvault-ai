@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { Document } from '../types'
+import { extractFilename } from '../utils/filename'
 
 const API_URL = 'http://localhost:8000'
 
@@ -56,7 +57,13 @@ export const api = {
 
             for (const file of fileArray) {
                 const formData = new FormData()
-                formData.append('file', file)
+                
+                // Extract just the filename (remove any path that might be in file.name)
+                const cleanFilename = extractFilename(file.name)
+                // Create a new File object with clean filename to ensure backend receives only filename
+                const fileWithCleanName = new File([file], cleanFilename, { type: file.type })
+                
+                formData.append('file', fileWithCleanName)
 
                 // Handle folder: can be a string or a function that returns folder path per file
                 let fileFolder: string | undefined
@@ -74,8 +81,8 @@ export const api = {
                     onUploadProgress: (progressEvent) => {
                         if (progressEvent.total && onProgress) {
                             const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total)
-                            // Use filename as temporary ID until we get the response
-                            onProgress(file.name, progress)
+                            // Use clean filename as temporary ID until we get the response
+                            onProgress(cleanFilename, progress)
                         }
                     }
                 })
@@ -126,6 +133,32 @@ export const api = {
         } catch (error) {
             console.error(`Error fetching file content ${filename}:`, error)
             throw new Error("Failed to load file content.")
+        }
+    },
+
+    deleteFolder: async (folderPath: string): Promise<{ message: string; deleted_count: number }> => {
+        try {
+            const encodedPath = encodeURIComponent(folderPath)
+            const res = await axios.delete(`${API_URL}/documents/folders/${encodedPath}`)
+            return res.data
+        } catch (error: any) {
+            console.error(`Error deleting folder ${folderPath}:`, error)
+            const errorMsg = error.response?.data?.detail || error.message || "Failed to delete folder."
+            throw new Error(errorMsg)
+        }
+    },
+
+    moveFolder: async (folderPath: string, newFolderPath: string | null): Promise<{ message: string; moved_count: number }> => {
+        try {
+            const formData = new FormData()
+            if (newFolderPath) {
+                formData.append('new_folder_path', newFolderPath)
+            }
+            const res = await axios.put(`${API_URL}/documents/folders/${encodeURIComponent(folderPath)}/move`, formData)
+            return res.data
+        } catch (error) {
+            console.error(`Error moving folder ${folderPath}:`, error)
+            throw new Error("Failed to move folder.")
         }
     },
 

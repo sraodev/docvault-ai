@@ -10,4 +10,5 @@ export interface Document {
     checksum?: string  // SHA-256 checksum for duplicate detection
     uploadProgress?: number  // 0-100 for upload progress
     size?: number  // File size in bytes
+    modified_date?: string  // Last modified date
 }

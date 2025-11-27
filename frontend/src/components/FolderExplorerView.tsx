@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Folder, FolderOpen, File, ChevronRight, ChevronDown, X, Trash2 } from 'lucide-react'
+import { Folder, FolderOpen, File, ChevronRight, ChevronDown, Trash2 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import { Document } from '../types'
+import { extractFilename } from '../utils/filename'
 
 function cn(...inputs: (string | undefined | null | false)[]) {
     return twMerge(clsx(inputs))
@@ -137,7 +138,7 @@ export function FolderExplorerView({
                                                         className="text-xs flex-1 truncate" 
                                                         title={doc.filename}
                                                     >
-                                                        {doc.filename}
+                                                        {extractFilename(doc.filename)}
                                                     </span>
                                                     <span className="px-1 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 uppercase shrink-0">
                                                         {getFileType(doc.filename)}
@@ -218,7 +219,7 @@ export function FolderExplorerView({
                                                     className="text-xs flex-1 truncate" 
                                                     title={doc.filename}
                                                 >
-                                                    {doc.filename}
+                                                    {extractFilename(doc.filename)}
                                                 </span>
                                                 <span className="px-1 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 uppercase shrink-0">
                                                     {getFileType(doc.filename)}

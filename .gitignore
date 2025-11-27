@@ -32,3 +32,5 @@ dist/
 coverage/
 backend/app/core/anthropic-key
 backend/app/core/openrouterkey
+video_demo/*.mov
+video_demo/*.MOV

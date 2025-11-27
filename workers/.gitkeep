@@ -1,0 +1,4 @@
+# Background Workers
+# Placeholder for background worker services
+# Examples: Celery workers, async task processors, etc.
+

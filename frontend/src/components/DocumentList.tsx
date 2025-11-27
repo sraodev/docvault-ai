@@ -4,6 +4,7 @@ import { twMerge } from 'tailwind-merge'
 import { Document } from '../types'
 import { ProgressBar } from './ProgressBar'
 import { formatFileSize } from '../utils/formatSize'
+import { extractFilename } from '../utils/filename'
 
 function cn(...inputs: (string | undefined | null | false)[]) {
     return twMerge(clsx(inputs))
@@ -73,7 +74,7 @@ export function DocumentList({ documents, selectedDocId, onSelect, onDelete, upl
                                     className="text-sm font-medium break-words text-slate-900"
                                     title={doc.filename}
                                 >
-                                    {doc.filename}
+                                    {extractFilename(doc.filename)}
                                 </p>
                                 <div className="mt-2 space-y-1.5">
                                     {/* Progress Bar for uploading/processing states */}

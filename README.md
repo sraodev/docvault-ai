@@ -4,7 +4,10 @@ A modern document management system that uses AI to automatically summarize and 
 
 ## Features
 
-- **Document Upload**: Drag-and-drop interface for uploading files (PDF, TXT, MD)
+- **Document Upload**: Multiple upload methods:
+  - **"+ New" dropdown**: File Upload and Folder Upload options
+  - **Drag-and-drop**: Drag files or folders directly onto the main DriveView area
+  - Supports PDF, TXT, MD, and other document formats
 - **AI Processing**: Automatically generates concise summaries and clean Markdown versions using AI providers (OpenRouter, Anthropic Claude, or Mock)
 - **Virtual Folder Organization**: Organize documents into virtual folders/categories stored as metadata
 - **Folder Explorer View**: Tree-structured navigation to browse documents by folder

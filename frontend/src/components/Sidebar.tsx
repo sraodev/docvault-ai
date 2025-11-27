@@ -1,10 +1,9 @@
-import { useState, useRef, useEffect } from 'react'
-import { FileText, List, FolderKanban, FolderPlus, Upload, FolderOpen, Plus, ChevronDown } from 'lucide-react'
+import { useState, useRef, useEffect, useMemo } from 'react'
+import { FileText, FolderPlus, Upload, FolderOpen, Plus, ChevronDown, ChevronRight, Folder, File, Archive } from 'lucide-react'
 import { clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
-import { DocumentList } from './DocumentList'
-import { FolderExplorerView } from './FolderExplorerView'
 import { Document } from '../types'
+import { extractFilename } from '../utils/filename'
 
 function cn(...inputs: (string | undefined | null | false)[]) {
     return twMerge(clsx(inputs))
@@ -19,6 +18,8 @@ interface SidebarProps {
     isUploading: boolean
     uploadError: string | null
     uploadProgress?: Map<string, number>
+    currentFolder?: string | null
+    onFolderChange?: (folder: string | null) => void
 }
 
 export function Sidebar({
@@ -29,14 +30,16 @@ export function Sidebar({
     onUpload,
     isUploading,
     uploadError,
-    uploadProgress
+    uploadProgress,
+    currentFolder,
+    onFolderChange
 }: SidebarProps) {
-    const [viewMode, setViewMode] = useState<'list' | 'folders'>('list')
     const fileInputRef = useRef<HTMLInputElement>(null)
     const folderInputRef = useRef<HTMLInputElement>(null)
     const [newFolderName, setNewFolderName] = useState('')
     const [showNewFolderInput, setShowNewFolderInput] = useState(false)
     const [showNewMenu, setShowNewMenu] = useState(false)
+    const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
 
     const handleNewFolder = () => {
         setShowNewMenu(false)
@@ -45,10 +48,9 @@ export function Sidebar({
 
     const handleCreateFolder = () => {
         if (newFolderName.trim()) {
-            // Create folder logic - for now just reset
+            // Folder creation will be implemented when backend supports it
             setNewFolderName('')
             setShowNewFolderInput(false)
-            // TODO: Implement folder creation API call
         }
     }
 
@@ -99,6 +101,173 @@ export function Sidebar({
         }
         // Reset input so same folder can be selected again
         e.target.value = ''
+    }
+
+    // Build folder tree structure
+    const folderTree = useMemo(() => {
+        interface FolderNode {
+            name: string
+            fullPath: string
+            files: Document[]
+            subfolders: Map<string, FolderNode>
+        }
+
+        const root: FolderNode = {
+            name: '',
+            fullPath: '',
+            files: [],
+            subfolders: new Map()
+        }
+
+        documents.forEach(doc => {
+            if (!doc.folder) {
+                root.files.push(doc)
+                return
+            }
+
+            const parts = doc.folder.split('/').filter(p => p.trim() !== '')
+            let current = root
+
+            parts.forEach((part, index) => {
+                if (!current.subfolders.has(part)) {
+                    const fullPath = parts.slice(0, index + 1).join('/')
+                    current.subfolders.set(part, {
+                        name: part,
+                        fullPath,
+                        files: [],
+                        subfolders: new Map()
+                    })
+                }
+                current = current.subfolders.get(part)!
+            })
+
+            current.files.push(doc)
+        })
+
+        return root
+    }, [documents])
+
+    const toggleFolder = (folderPath: string) => {
+        const newExpanded = new Set(expandedFolders)
+        if (newExpanded.has(folderPath)) {
+            newExpanded.delete(folderPath)
+        } else {
+            newExpanded.add(folderPath)
+        }
+        setExpandedFolders(newExpanded)
+    }
+
+    const handleFolderClick = (folderPath: string | null) => {
+        if (onFolderChange) {
+            onFolderChange(folderPath)
+        }
+    }
+
+    const renderFolderNode = (node: { name: string; fullPath: string; files: Document[]; subfolders: Map<string, any> }, level: number = 0): JSX.Element | null => {
+        const isExpanded = expandedFolders.has(node.fullPath)
+        const isActive = currentFolder === node.fullPath || (node.fullPath === '' && currentFolder === null)
+
+        // Skip rendering root node if it has no content
+        if (node.fullPath === '' && node.files.length === 0 && node.subfolders.size === 0) {
+            return null
+        }
+
+        // Only render non-root folders
+        if (node.fullPath === '') {
+            // For root, render subfolders directly
+            return (
+                <>
+                    {Array.from(node.subfolders.values())
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map(subfolder => renderFolderNode(subfolder, level))}
+                </>
+            )
+        }
+
+        return (
+            <div key={node.fullPath} className="mb-0.5">
+                <div
+                    className={cn(
+                        "flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors group",
+                        "hover:bg-slate-100",
+                        isActive && "bg-blue-50 text-blue-700"
+                    )}
+                    style={{ paddingLeft: `${8 + level * 16}px` }}
+                    onClick={() => {
+                        toggleFolder(node.fullPath)
+                        handleFolderClick(node.fullPath)
+                    }}
+                >
+                    {node.subfolders.size > 0 ? (
+                        isExpanded ? (
+                            <ChevronDown className="w-3 h-3 shrink-0 text-slate-500" />
+                        ) : (
+                            <ChevronRight className="w-3 h-3 shrink-0 text-slate-500" />
+                        )
+                    ) : (
+                        <div className="w-3 h-3 shrink-0" />
+                    )}
+                    {isExpanded ? (
+                        <FolderOpen className={cn("w-4 h-4 shrink-0", isActive ? "text-blue-600" : "text-indigo-500")} />
+                    ) : (
+                        <Folder className={cn("w-4 h-4 shrink-0", isActive ? "text-blue-600" : "text-slate-500")} />
+                    )}
+                    <span className={cn(
+                        "text-xs font-medium flex-1 truncate",
+                        isActive && "font-semibold"
+                    )} title={node.name}>
+                        {node.name}
+                    </span>
+                    {(node.files.length > 0 || node.subfolders.size > 0) && (
+                        <span className="text-xs text-slate-400 shrink-0">
+                            {node.files.length + Array.from(node.subfolders.values()).reduce((sum, sub) => sum + sub.files.length, 0)}
+                        </span>
+                    )}
+                </div>
+
+                {/* Render files and subfolders when expanded */}
+                {isExpanded && (
+                    <div className="mt-0.5">
+                        {/* Render files */}
+                        {node.files.map((doc) => {
+                            const isSelected = selectedDocId === doc.id
+                            return (
+                                <div
+                                    key={doc.id}
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        onSelect(doc)
+                                    }}
+                                    className={cn(
+                                        "flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors group",
+                                        isSelected
+                                            ? "bg-indigo-50 text-indigo-700"
+                                            : "hover:bg-slate-50",
+                                    )}
+                                    style={{ paddingLeft: `${24 + level * 16}px` }}
+                                >
+                                    <File className={cn(
+                                        "w-3.5 h-3.5 shrink-0",
+                                        isSelected ? "text-indigo-600" : "text-slate-500"
+                                    )} />
+                                    <span 
+                                        className="text-xs flex-1 truncate" 
+                                        title={doc.filename}
+                                    >
+                                        {extractFilename(doc.filename)}
+                                    </span>
+                                </div>
+                            )
+                        })}
+
+                        {/* Render subfolders */}
+                        {Array.from(node.subfolders.values())
+                            .sort((a, b) => a.name.localeCompare(b.name))
+                            .map(subfolder => renderFolderNode(subfolder, level + 1))}
+                    </div>
+                )}
+            </div>
+        )
     }
 
     // Close dropdown when clicking outside
@@ -200,17 +369,38 @@ export function Sidebar({
                 )}
             </div>
 
-            {/* Navigation */}
+            {/* Navigation - Folder Tree */}
             <div className="flex-1 overflow-y-auto py-2">
                 <nav className="space-y-1 px-2">
-                    <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100 text-slate-700 flex items-center gap-3 transition-colors">
-                        <FolderKanban className="w-5 h-5" />
+                    {/* Root "My Vault" button */}
+                    <button 
+                        onClick={() => handleFolderClick(null)}
+                        className={cn(
+                            "w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100 text-slate-700 flex items-center gap-3 transition-colors",
+                            (currentFolder === null || currentFolder === undefined) && "bg-blue-50 text-blue-700 font-semibold"
+                        )}
+                    >
+                        <Archive className={cn(
+                            "w-5 h-5",
+                            (currentFolder === null || currentFolder === undefined) && "text-blue-600"
+                        )} />
                         <span className="text-sm font-medium">My Vault</span>
                     </button>
-                    <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100 text-slate-700 flex items-center gap-3 transition-colors">
-                        <List className="w-5 h-5" />
-                        <span className="text-sm font-medium">Recent</span>
-                    </button>
+
+                    {/* Folder Tree */}
+                    <div className="mt-2">
+                        {folderTree.subfolders.size > 0 || folderTree.files.length > 0 ? (
+                            <>
+                                {Array.from(folderTree.subfolders.values())
+                                    .sort((a, b) => a.name.localeCompare(b.name))
+                                    .map(subfolder => renderFolderNode(subfolder, 0))}
+                            </>
+                        ) : (
+                            <div className="px-3 py-8 text-center text-slate-400 text-xs">
+                                No folders yet
+                            </div>
+                        )}
+                    </div>
                 </nav>
             </div>
 

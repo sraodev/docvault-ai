@@ -13,14 +13,22 @@ function App() {
     uploadError,
     handleUpload,
     handleDelete,
+    handleDeleteFolder,
+    handleMoveFolder,
     uploadProgress
   } = useDocuments()
 
   const [showViewer, setShowViewer] = useState(false)
+  const [currentFolder, setCurrentFolder] = useState<string | null>(null)
 
   const handleSelect = (doc: any) => {
     setSelectedDoc(doc)
     setShowViewer(true)
+  }
+
+  const handleCloseViewer = () => {
+    setShowViewer(false)
+    setSelectedDoc(null)
   }
 
   return (
@@ -34,14 +42,17 @@ function App() {
         isUploading={isUploading}
         uploadError={uploadError}
         uploadProgress={uploadProgress}
+        currentFolder={currentFolder}
+        onFolderChange={setCurrentFolder}
       />
 
       {showViewer && selectedDoc ? (
         <DocumentViewer
           document={selectedDoc}
-          onClose={() => {
-            setShowViewer(false)
-            setSelectedDoc(null)
+          onClose={handleCloseViewer}
+          onNavigateToFolder={(folder: string | null) => {
+            setCurrentFolder(folder)
+            handleCloseViewer()
           }}
         />
       ) : (
@@ -52,6 +63,10 @@ function App() {
           onDelete={handleDelete}
           onUpload={handleUpload}
           uploadProgress={uploadProgress}
+          currentFolder={currentFolder}
+          onFolderChange={setCurrentFolder}
+          onDeleteFolder={handleDeleteFolder}
+          onMoveFolder={handleMoveFolder}
         />
       )}
     </div>
