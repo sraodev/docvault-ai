@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from 'react'
 import { FileText, List, FolderKanban, FolderPlus, Upload, FolderOpen, Plus, ChevronDown } from 'lucide-react'
 import { clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
-import { UploadArea } from './UploadArea'
 import { DocumentList } from './DocumentList'
 import { FolderExplorerView } from './FolderExplorerView'
 import { Document } from '../types'
@@ -213,15 +212,6 @@ export function Sidebar({
                         <span className="text-sm font-medium">Recent</span>
                     </button>
                 </nav>
-
-                {/* Upload Area */}
-                <div className="px-2 mt-4">
-                    <UploadArea
-                        onUpload={onUpload}
-                        isUploading={isUploading}
-                        error={uploadError}
-                    />
-                </div>
             </div>
 
             {/* Hidden Inputs */}
