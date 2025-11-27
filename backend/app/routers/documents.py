@@ -13,15 +13,30 @@ from concurrent.futures import ThreadPoolExecutor
 from ..models.document import DocumentMetadata
 from ..services.ai_service import AIService
 from ..services.file_service import FileService
-from ..core.config import UPLOAD_DIR
+from ..services.database import DatabaseFactory
+from ..core.config import UPLOAD_DIR, DATABASE_TYPE, STORAGE_TYPE, JSON_DB_PATH
+from pathlib import Path
 
 router = APIRouter()
 
-# In-memory database (Mock)
-documents_db: Dict[str, dict] = {}
+# Initialize database service using Factory Pattern (plug-and-play)
+# Supports JSON (file-based) and Memory (in-memory) database backends
+db_service = None  # Will be initialized on startup
+
+async def initialize_database():
+    """Initialize database adapter based on configuration."""
+    global db_service
+    
+    if DATABASE_TYPE.lower() == "json":
+        data_dir = Path(JSON_DB_PATH) if JSON_DB_PATH else None
+        db_service = await DatabaseFactory.create_and_initialize("json", data_dir=data_dir)
+    elif DATABASE_TYPE.lower() == "memory":
+        db_service = await DatabaseFactory.create_and_initialize("memory")
+    else:
+        raise ValueError(f"Unsupported DATABASE_TYPE: {DATABASE_TYPE}. Supported types: 'json', 'memory'")
 
 ai_service = AIService()
-file_service = FileService()
+file_service = FileService()  # Will initialize storage on first use
 
 def calculate_file_checksum(file_path: Path) -> str:
     """Calculate SHA-256 checksum of a file"""
@@ -31,22 +46,19 @@ def calculate_file_checksum(file_path: Path) -> str:
             sha256_hash.update(byte_block)
     return sha256_hash.hexdigest()
 
-def check_duplicate_by_checksum(checksum: str) -> Optional[dict]:
+async def check_duplicate_by_checksum(checksum: str) -> Optional[dict]:
     """Check if a file with the same checksum already exists"""
-    for doc_id, doc in documents_db.items():
-        if doc.get("checksum") == checksum:
-            return doc
-    return None
+    return await db_service.find_document_by_checksum(checksum)
 
-def process_document_background(doc_id: str, file_path: Path):
+async def process_document_background_async(doc_id: str, file_path: Path):
     """
-    Background task to process document with AI.
+    Background task to process document with AI (async version).
     """
     try:
         print(f"Processing document {doc_id}...")
         
         # 1. Extract Text
-        text_content = file_service.extract_text(file_path)
+        text_content = await file_service.extract_text(file_path)
 
         # 2. Generate Summary and Markdown
         summary = ai_service.generate_summary(text_content)
@@ -55,21 +67,35 @@ def process_document_background(doc_id: str, file_path: Path):
         # 3. Save Markdown
         md_filename = f"{doc_id}_processed.md"
         md_path = UPLOAD_DIR / md_filename
-        file_service.save_markdown(markdown_content, md_path)
+        await file_service.save_markdown(markdown_content, md_path)
 
         # 4. Update DB
-        if doc_id in documents_db:
-            documents_db[doc_id]["summary"] = summary
-            documents_db[doc_id]["markdown_path"] = str(md_path)
-            documents_db[doc_id]["status"] = "completed"
-            documents_db[doc_id]["modified_date"] = datetime.now().isoformat()
+        await db_service.update_document(doc_id, {
+            "summary": summary,
+            "markdown_path": str(md_path),
+            "status": "completed",
+            "modified_date": datetime.now().isoformat()
+        })
         
         print(f"Finished processing {doc_id}")
 
     except Exception as e:
         print(f"Fatal error processing {doc_id}: {e}")
-        if doc_id in documents_db:
-            documents_db[doc_id]["status"] = "failed"
+        await db_service.update_document(doc_id, {"status": "failed"})
+
+def process_document_background_sync(doc_id: str, file_path: Path):
+    """
+    Wrapper for background task processing (sync wrapper for async function).
+    FastAPI BackgroundTasks requires sync functions, so we run async code in event loop.
+    """
+    import asyncio
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
+    loop.run_until_complete(process_document_background_async(doc_id, file_path))
 
 @router.post("/upload", response_model=DocumentMetadata)
 async def upload_file(
@@ -90,22 +116,26 @@ async def upload_file(
         save_path = UPLOAD_DIR / save_filename
 
         # Save file first to calculate checksum
-        file_service.save_upload(file, save_path)
+        await file_service.save_upload(file, save_path)
         
-        # Get file size
-        file_size = save_path.stat().st_size
+        # Get file size and calculate checksum
+        # For local storage, we can use stat(); for S3/Supabase, we'll get size from file bytes
+        storage_adapter = await file_service.storage
+        file_bytes = await storage_adapter.get_file(str(save_path))
+        file_size = len(file_bytes)
         
-        # Calculate checksum
-        file_checksum = checksum or calculate_file_checksum(save_path)
+        # Calculate checksum from bytes
+        import hashlib
+        file_checksum = checksum or hashlib.sha256(file_bytes).hexdigest()
         
         # Extract just the filename (remove any path that might be included)
         clean_filename = Path(file.filename).name
         
         # Check for duplicate
-        duplicate_doc = check_duplicate_by_checksum(file_checksum)
+        duplicate_doc = await check_duplicate_by_checksum(file_checksum)
         if duplicate_doc:
             # Delete the just uploaded file since it's a duplicate
-            file_service.delete_file(save_path)
+            await file_service.delete_file(save_path)
             raise HTTPException(
                 status_code=409,
                 detail=f"File '{clean_filename}' already exists as '{duplicate_doc['filename']}'"
@@ -129,10 +159,11 @@ async def upload_file(
             "modified_date": upload_time  # Initially same as upload_date
         }
         
-        documents_db[doc_id] = doc_meta
+        # Save to database
+        doc_meta = await db_service.create_document(doc_meta)
 
-        # Trigger background processing
-        background_tasks.add_task(process_document_background, doc_id, save_path)
+        # Trigger background processing (async function)
+        background_tasks.add_task(process_document_background_sync, doc_id, save_path)
 
         return doc_meta
     except HTTPException:
@@ -146,7 +177,7 @@ async def check_duplicate(checksum: str = Form(...)):
     """
     Check if a file with the given checksum already exists.
     """
-    duplicate_doc = check_duplicate_by_checksum(checksum)
+    duplicate_doc = await check_duplicate_by_checksum(checksum)
     if duplicate_doc:
         return {
             "is_duplicate": True,
@@ -162,7 +193,7 @@ async def check_duplicates(checksums: List[str] = Form(...)):
     """
     duplicates = []
     for checksum in checksums:
-        duplicate_doc = check_duplicate_by_checksum(checksum)
+        duplicate_doc = await check_duplicate_by_checksum(checksum)
         if duplicate_doc:
             duplicates.append({
                 "checksum": checksum,
@@ -210,27 +241,29 @@ async def process_single_file_upload_async(
         save_filename = f"{doc_id}{file_ext}"
         save_path = UPLOAD_DIR / save_filename
 
-        # Save file in thread pool (I/O operation)
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(executor, file_service.save_upload, file, save_path)
+        # Save file using storage adapter
+        await file_service.save_upload(file, save_path)
         
-        # Get file size
-        file_size = await loop.run_in_executor(executor, lambda: save_path.stat().st_size)
+        # Get file size and calculate checksum from storage
+        storage_adapter = await file_service.storage
+        file_bytes = await storage_adapter.get_file(str(save_path))
+        file_size = len(file_bytes)
         
-        # Calculate checksum in thread pool (CPU-intensive)
+        # Calculate checksum from bytes
+        import hashlib
         if checksum:
             file_checksum = checksum
         else:
-            file_checksum = await loop.run_in_executor(executor, calculate_file_checksum, save_path)
+            file_checksum = hashlib.sha256(file_bytes).hexdigest()
         
         # Extract just the filename
         clean_filename = Path(file.filename).name
         
         # Check for duplicate (quick in-memory lookup, no I/O needed)
-        duplicate_doc = check_duplicate_by_checksum(file_checksum)
+        duplicate_doc = await check_duplicate_by_checksum(file_checksum)
         if duplicate_doc:
             # Delete the just uploaded file since it's a duplicate
-            await loop.run_in_executor(executor, file_service.delete_file, save_path)
+            await file_service.delete_file(save_path)
             return {
                 "status": "duplicate",
                 "filename": clean_filename,
@@ -256,11 +289,11 @@ async def process_single_file_upload_async(
             "modified_date": upload_time
         }
         
-        # Thread-safe database update (in-memory dict, but still use lock if needed)
-        documents_db[doc_id] = doc_meta
+        # Save to database (thread-safe)
+        doc_meta = await db_service.create_document(doc_meta)
 
-        # Trigger background processing
-        background_tasks.add_task(process_document_background, doc_id, save_path)
+        # Trigger background processing (async function)
+        background_tasks.add_task(process_document_background_sync, doc_id, save_path)
 
         return {
             "status": "success",
@@ -400,11 +433,7 @@ async def get_documents(folder: Optional[str] = None):
     Get all documents, optionally filtered by folder.
     Ensures all documents have a size field by calculating it from the file if missing.
     """
-    docs = list(documents_db.values())
-    
-    # Filter by folder if specified
-    if folder:
-        docs = [doc for doc in docs if doc.get("folder") == folder]
+    docs = await db_service.get_all_documents(folder=folder)
     
     # Ensure all documents have size and modified_date fields
     for doc in docs:
@@ -412,7 +441,9 @@ async def get_documents(folder: Optional[str] = None):
             file_path = Path(doc.get("file_path", ""))
             if file_path.exists():
                 try:
-                    doc["size"] = file_path.stat().st_size
+                    size = file_path.stat().st_size
+                    await db_service.update_document(doc["id"], {"size": size})
+                    doc["size"] = size
                 except Exception as e:
                     print(f"Error calculating size for {doc.get('id')}: {e}")
                     doc["size"] = None
@@ -427,28 +458,98 @@ async def get_documents(folder: Optional[str] = None):
 async def get_folders():
     """
     Get list of all available folders/categories.
-    Returns unique folder names from all documents.
+    Returns unique folder paths from both documents and folders collection (for empty folders).
     """
-    folders = set()
-    for doc in documents_db.values():
-        folder = doc.get("folder")
-        if folder:
-            folders.add(folder)
-    return {"folders": sorted(list(folders))}
+    folders = await db_service.get_all_folders()
+    return {"folders": folders}
+
+@router.post("/documents/folders")
+async def create_folder(
+    folder_name: str = Form(...),
+    parent_folder: Optional[str] = Form(None)
+):
+    """
+    Create a new folder. Since folders are virtual (metadata only),
+    this validates the folder name and returns success.
+    The folder will appear in the tree once files are uploaded to it.
+    
+    Args:
+        folder_name: Name of the folder to create (required)
+        parent_folder: Optional parent folder path (for nested folders)
+    
+    Returns:
+        Dict with success message and the full folder path
+    """
+    try:
+        # Validate folder name
+        folder_name = folder_name.strip()
+        if not folder_name:
+            raise HTTPException(status_code=400, detail="Folder name cannot be empty")
+        
+        # Validate folder name doesn't contain invalid characters
+        invalid_chars = ['/', '\\', ':', '*', '?', '"', '<', '>', '|']
+        if any(char in folder_name for char in invalid_chars):
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Folder name cannot contain: {', '.join(invalid_chars)}"
+            )
+        
+        # Build full folder path
+        if parent_folder and parent_folder.strip():
+            full_folder_path = f"{parent_folder.strip()}/{folder_name}"
+        else:
+            full_folder_path = folder_name
+        
+        # Check if folder already exists
+        existing_folder = await db_service.get_folder(full_folder_path)
+        if existing_folder:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Folder '{full_folder_path}' already exists"
+            )
+        
+        # Check if any documents use this folder path
+        docs_in_folder = await db_service.get_documents_by_folder(full_folder_path)
+        if docs_in_folder:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Folder '{full_folder_path}' already exists"
+            )
+        
+        # Store folder metadata so empty folders appear in the tree
+        folder_data = {
+            "name": folder_name,
+            "folder_path": full_folder_path,
+            "parent_folder": parent_folder.strip() if parent_folder and parent_folder.strip() else None,
+            "created_date": datetime.now().isoformat()
+        }
+        await db_service.create_folder(folder_data)
+        
+        return {
+            "message": "Folder created successfully",
+            "folder_path": full_folder_path,
+            "folder_name": folder_name
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error creating folder: {e}")
+        raise HTTPException(status_code=500, detail=f"Folder creation failed: {str(e)}")
 
 @router.get("/documents/{doc_id}", response_model=DocumentMetadata)
 async def get_document(doc_id: str):
-    if doc_id not in documents_db:
+    doc = await db_service.get_document(doc_id)
+    if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
-    
-    doc = documents_db[doc_id]
     
     # Ensure document has size field
     if "size" not in doc or doc.get("size") is None:
         file_path = Path(doc.get("file_path", ""))
         if file_path.exists():
             try:
-                doc["size"] = file_path.stat().st_size
+                size = file_path.stat().st_size
+                await db_service.update_document(doc_id, {"size": size})
+                doc["size"] = size
             except Exception as e:
                 print(f"Error calculating size for {doc_id}: {e}")
                 doc["size"] = None
@@ -461,29 +562,50 @@ async def get_document(doc_id: str):
 
 @router.get("/files/{filename}")
 async def get_file(filename: str):
-    file_path = UPLOAD_DIR / filename
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(file_path)
+    """Get a file from storage (works with local, S3, or Supabase)."""
+    try:
+        storage_adapter = await file_service.storage
+        file_path = str(UPLOAD_DIR / filename)
+        
+        # Check if file exists
+        if not await storage_adapter.file_exists(file_path):
+            raise HTTPException(status_code=404, detail="File not found")
+        
+        # For local storage, return FileResponse for efficiency
+        if STORAGE_TYPE.lower() == "local":
+            from fastapi.responses import FileResponse
+            # Get the actual local path
+            local_storage = storage_adapter
+            local_path = local_storage._get_full_path(file_path)
+            if local_path.exists():
+                return FileResponse(local_path)
+        
+        # For S3/Supabase, get file bytes
+        file_bytes = await storage_adapter.get_file(file_path)
+        from fastapi.responses import Response
+        return Response(content=file_bytes, media_type="application/octet-stream")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving file: {str(e)}")
 
 @router.delete("/documents/{doc_id}")
 async def delete_document(doc_id: str):
-    if doc_id not in documents_db:
+    doc = await db_service.get_document(doc_id)
+    if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     
     try:
-        doc = documents_db[doc_id]
-        
         # Delete original file
         if doc.get("file_path"):
-            file_service.delete_file(Path(doc["file_path"]))
+            await file_service.delete_file(Path(doc["file_path"]))
             
         # Delete markdown file
         if doc.get("markdown_path"):
-            file_service.delete_file(Path(doc["markdown_path"]))
+            await file_service.delete_file(Path(doc["markdown_path"]))
             
         # Remove from DB
-        del documents_db[doc_id]
+        await db_service.delete_document(doc_id)
         
         return {"message": "Document deleted successfully"}
     except HTTPException:
@@ -501,42 +623,31 @@ async def delete_folder(folder_path: str):
         # Ensure proper URL decoding (FastAPI's :path converter handles this, but be explicit)
         folder_path = urllib.parse.unquote(folder_path)
         
-        deleted_count = 0
-        doc_ids_to_delete = []
+        # Get all documents in this folder and subfolders
+        docs_to_delete = await db_service.get_documents_by_folder(folder_path, include_subfolders=True)
         
-        # Find all documents in this folder and subfolders
-        for doc_id, doc in documents_db.items():
-            doc_folder = doc.get("folder")
-            if doc_folder:
-                # Check if document belongs to this folder or any subfolder
-                if doc_folder == folder_path or doc_folder.startswith(f"{folder_path}/"):
-                    doc_ids_to_delete.append(doc_id)
+        # Delete files from storage
+        for doc in docs_to_delete:
+            try:
+                # Delete original file
+                if doc.get("file_path"):
+                    await file_service.delete_file(Path(doc["file_path"]))
+                    
+                # Delete markdown file
+                if doc.get("markdown_path"):
+                    await file_service.delete_file(Path(doc["markdown_path"]))
+            except Exception as file_err:
+                # Log but continue with deletion
+                print(f"Warning: Error deleting files for {doc['id']}: {file_err}")
         
-        if len(doc_ids_to_delete) == 0:
+        # Delete from database (this handles both documents and folder metadata)
+        deleted_count = await db_service.delete_folder(folder_path)
+        
+        if deleted_count == 0:
             return {
                 "message": f"Folder '{folder_path}' is empty or not found",
                 "deleted_count": 0
             }
-        
-        # Delete all documents in the folder
-        for doc_id in doc_ids_to_delete:
-            doc = documents_db[doc_id]
-            
-            try:
-                # Delete original file
-                if doc.get("file_path"):
-                    file_service.delete_file(Path(doc["file_path"]))
-                    
-                # Delete markdown file
-                if doc.get("markdown_path"):
-                    file_service.delete_file(Path(doc["markdown_path"]))
-            except Exception as file_err:
-                # Log but continue with deletion
-                print(f"Warning: Error deleting files for {doc_id}: {file_err}")
-            
-            # Remove from DB
-            del documents_db[doc_id]
-            deleted_count += 1
         
         return {
             "message": f"Folder deleted successfully",
@@ -554,29 +665,12 @@ async def move_folder(folder_path: str, new_folder_path: Optional[str] = Form(No
     """
     try:
         folder_path = urllib.parse.unquote(folder_path)
-        moved_count = 0
         
-        # Find all documents in this folder and subfolders
-        for doc_id, doc in documents_db.items():
-            doc_folder = doc.get("folder")
-            if doc_folder:
-                # Check if document belongs to this folder or any subfolder
-                if doc_folder == folder_path or doc_folder.startswith(f"{folder_path}/"):
-                    # Calculate new folder path
-                    if doc_folder == folder_path:
-                        # Root level files in the folder go to new location
-                        new_doc_folder = new_folder_path.strip() if new_folder_path and new_folder_path.strip() else None
-                    else:
-                        # Subfolder files: replace the old folder path prefix with new one
-                        relative_path = doc_folder[len(folder_path) + 1:]  # Remove old folder path prefix
-                        if new_folder_path and new_folder_path.strip():
-                            new_doc_folder = f"{new_folder_path.strip()}/{relative_path}"
-                        else:
-                            new_doc_folder = relative_path if relative_path else None
-                    
-                    # Update document folder
-                    doc["folder"] = new_doc_folder.strip() if new_doc_folder else None
-                    moved_count += 1
+        # Normalize new_folder_path
+        normalized_new_path = new_folder_path.strip() if new_folder_path and new_folder_path.strip() else None
+        
+        # Use database service to update folder paths
+        moved_count = await db_service.update_folder_path(folder_path, normalized_new_path)
         
         return {
             "message": f"Folder moved successfully",

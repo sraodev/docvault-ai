@@ -162,5 +162,30 @@ export const api = {
         }
     },
 
+    createFolder: async (folderName: string, parentFolder?: string | null): Promise<{ message: string; folder_path: string; folder_name: string }> => {
+        try {
+            console.log("API: Creating folder", folderName, "parent:", parentFolder)
+            const formData = new FormData()
+            formData.append('folder_name', folderName)
+            if (parentFolder && parentFolder.trim()) {
+                formData.append('parent_folder', parentFolder.trim())
+            }
+            console.log("API: Sending POST request to", `${API_URL}/documents/folders`)
+            const res = await axios.post(`${API_URL}/documents/folders`, formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                }
+            })
+            console.log("API: Folder created successfully", res.data)
+            return res.data
+        } catch (error: any) {
+            console.error(`Error creating folder ${folderName}:`, error)
+            console.error("Error response:", error.response?.data)
+            console.error("Error status:", error.response?.status)
+            const errorMsg = error.response?.data?.detail || error.response?.data?.message || error.message || "Failed to create folder."
+            throw new Error(errorMsg)
+        }
+    },
+
     getApiUrl: () => API_URL
 }

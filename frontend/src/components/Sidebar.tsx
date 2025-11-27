@@ -4,6 +4,7 @@ import { clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import { Document } from '../types'
 import { extractFilename } from '../utils/filename'
+import { api } from '../services/api'
 
 function cn(...inputs: (string | undefined | null | false)[]) {
     return twMerge(clsx(inputs))
@@ -20,6 +21,7 @@ interface SidebarProps {
     uploadProgress?: Map<string, number>
     currentFolder?: string | null
     onFolderChange?: (folder: string | null) => void
+    onCreateFolder?: (folderName: string, parentFolder?: string | null) => Promise<void>
 }
 
 export function Sidebar({
@@ -32,7 +34,8 @@ export function Sidebar({
     uploadError,
     uploadProgress,
     currentFolder,
-    onFolderChange
+    onFolderChange,
+    onCreateFolder
 }: SidebarProps) {
     const fileInputRef = useRef<HTMLInputElement>(null)
     const folderInputRef = useRef<HTMLInputElement>(null)
@@ -40,17 +43,38 @@ export function Sidebar({
     const [showNewFolderInput, setShowNewFolderInput] = useState(false)
     const [showNewMenu, setShowNewMenu] = useState(false)
     const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
+    const [allFolders, setAllFolders] = useState<string[]>([])
 
     const handleNewFolder = () => {
         setShowNewMenu(false)
         setShowNewFolderInput(true)
     }
 
-    const handleCreateFolder = () => {
-        if (newFolderName.trim()) {
-            // Folder creation will be implemented when backend supports it
+    const handleCreateFolder = async () => {
+        const trimmedName = newFolderName.trim()
+        if (!trimmedName) {
+            alert("Please enter a folder name")
+            return
+        }
+
+        if (!onCreateFolder) {
+            alert("Folder creation is not available. Please refresh the page.")
+            console.error("onCreateFolder prop is not provided to Sidebar")
+            return
+        }
+
+        try {
+            console.log("Creating folder:", trimmedName, "in parent:", currentFolder)
+            // Create folder with current folder as parent (if in a folder)
+            await onCreateFolder(trimmedName, currentFolder || null)
+            console.log("Folder created successfully")
             setNewFolderName('')
             setShowNewFolderInput(false)
+        } catch (err: any) {
+            // Error is already shown via alert in the hook
+            // Just keep the input open so user can retry
+            console.error("Failed to create folder:", err)
+            // Don't clear the input so user can see what they typed
         }
     }
 
@@ -119,6 +143,28 @@ export function Sidebar({
             subfolders: new Map()
         }
 
+        // First, build folder structure from all folders (including empty ones)
+        allFolders.forEach(folderPath => {
+            if (!folderPath) return
+            
+            const parts = folderPath.split('/').filter(p => p.trim() !== '')
+            let current = root
+
+            parts.forEach((part, index) => {
+                if (!current.subfolders.has(part)) {
+                    const fullPath = parts.slice(0, index + 1).join('/')
+                    current.subfolders.set(part, {
+                        name: part,
+                        fullPath,
+                        files: [],
+                        subfolders: new Map()
+                    })
+                }
+                current = current.subfolders.get(part)!
+            })
+        })
+
+        // Then, add documents to their respective folders
         documents.forEach(doc => {
             if (!doc.folder) {
                 root.files.push(doc)
@@ -145,7 +191,7 @@ export function Sidebar({
         })
 
         return root
-    }, [documents])
+    }, [documents, allFolders])
 
     const toggleFolder = (folderPath: string) => {
         const newExpanded = new Set(expandedFolders)
@@ -285,8 +331,8 @@ export function Sidebar({
         <div className="w-64 bg-white border-r border-slate-200 flex flex-col">
             <div className="p-4 border-b border-slate-200">
                 <h1 className="text-xl font-semibold flex items-center gap-3 text-slate-900">
-                    <FileText className="w-7 h-7 text-blue-600" />
-                    DocVault AI
+                    <Archive className="w-7 h-7 text-blue-600" />
+                    My Vault
                 </h1>
             </div>
 
@@ -298,7 +344,12 @@ export function Sidebar({
                             type="text"
                             value={newFolderName}
                             onChange={(e) => setNewFolderName(e.target.value)}
-                            onKeyPress={(e) => e.key === 'Enter' && handleCreateFolder()}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault()
+                                    handleCreateFolder()
+                                }
+                            }}
                             placeholder="Folder name"
                             className="w-full px-2 py-1.5 text-xs border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                             autoFocus

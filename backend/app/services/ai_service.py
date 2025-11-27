@@ -1,6 +1,12 @@
 from .providers import AIProviderFactory
+from .interfaces import IAIService
 
-class AIService:
+class AIService(IAIService):
+    """
+    AI service implementation.
+    Handles AI operations - summary generation, markdown generation.
+    Follows Single Responsibility Principle.
+    """
     def __init__(self):
         self.provider = AIProviderFactory.get_provider()
 

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { Grid, List, Search, MoreVertical, Download, Share2, Trash2, FileText, Folder, Image, File, Upload, ChevronRight, Home, Move, X } from 'lucide-react'
+import { Grid, List, Search, MoreVertical, Download, Share2, Trash2, FileText, Folder, Image, File, Upload, ChevronRight, Archive, Move, X } from 'lucide-react'
 import { clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import { Document } from '../types'
@@ -546,7 +546,7 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
                         type="text"
-                        placeholder="Search in DocVault"
+                        placeholder="Search in My Vault"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -586,7 +586,7 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                             onClick={() => setCurrentFolder(null)}
                             className="flex items-center gap-1 text-slate-600 hover:text-slate-900 transition-colors"
                         >
-                            <Home className="w-4 h-4" />
+                            <Archive className="w-4 h-4" />
                             <span>My Vault</span>
                         </button>
                         {breadcrumbPath.map((folder, index) => {
@@ -759,7 +759,7 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                                 type="text"
                                 value={newFolderPath}
                                 onChange={(e) => setNewFolderPath(e.target.value)}
-                                placeholder="e.g., Documents/Projects"
+                                placeholder="e.g., My Vault/Projects"
                                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 autoFocus
                             />
@@ -911,7 +911,7 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                             <div className="col-span-full flex flex-col items-center justify-center py-16 text-slate-400">
                                 <Upload className="w-12 h-12 mb-4 text-slate-300" />
                                 <p className="text-lg font-medium text-slate-600 mb-2">
-                                    {searchQuery ? 'No files found' : currentFolder ? 'This folder is empty' : 'No documents yet'}
+                                    {searchQuery ? 'No files found' : currentFolder ? 'This folder is empty' : 'My Vault is empty'}
                                 </p>
                                 {!searchQuery && (
                                     <p className="text-sm text-slate-500">
@@ -1144,7 +1144,7 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                             <div className="flex flex-col items-center justify-center py-16 text-slate-400">
                                 <Upload className="w-12 h-12 mb-4 text-slate-300" />
                                 <p className="text-lg font-medium text-slate-600 mb-2">
-                                    {searchQuery ? 'No files found' : currentFolder ? 'This folder is empty' : 'No documents yet'}
+                                    {searchQuery ? 'No files found' : currentFolder ? 'This folder is empty' : 'My Vault is empty'}
                                 </p>
                                 {!searchQuery && (
                                     <p className="text-sm text-slate-500">

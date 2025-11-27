@@ -14,6 +14,8 @@ export function useDocuments() {
     const fetchDocuments = useCallback(async () => {
         try {
             const docs = await api.getDocuments()
+            // Also fetch folders list to ensure empty folders are included
+            await api.getFolders()
 
             // Merge with existing documents to preserve upload progress
             setDocuments(prevDocs => {
@@ -260,6 +262,32 @@ export function useDocuments() {
         }
     }
 
+    /**
+     * Creates a new folder. Since folders are virtual (metadata only),
+     * this validates the folder name. The folder will appear in the tree
+     * once files are uploaded to it.
+     * 
+     * @param folderName - Name of the folder to create
+     * @param parentFolder - Optional parent folder path (for nested folders)
+     */
+    const handleCreateFolder = async (folderName: string, parentFolder?: string | null) => {
+        try {
+            console.log("Hook: Creating folder", folderName, "parent:", parentFolder)
+            const result = await api.createFolder(folderName, parentFolder)
+            console.log("Hook: Folder created, result:", result)
+            // Refresh documents to ensure consistency
+            // Note: Folder won't appear in tree until files are uploaded to it
+            await fetchDocuments()
+            // Show success message
+            alert(`Folder "${result.folder_path}" created successfully!`)
+        } catch (err: any) {
+            console.error("Create folder failed in hook", err)
+            const errorMsg = err.message || "Failed to create folder"
+            alert(`Error: ${errorMsg}`)
+            throw err
+        }
+    }
+
     return {
         documents,
         selectedDoc,
@@ -270,6 +298,7 @@ export function useDocuments() {
         handleDelete,
         handleDeleteFolder,
         handleMoveFolder,
+        handleCreateFolder,
         isLoading,
         uploadProgress
     }

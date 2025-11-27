@@ -15,6 +15,7 @@ function App() {
     handleDelete,
     handleDeleteFolder,
     handleMoveFolder,
+    handleCreateFolder,
     uploadProgress
   } = useDocuments()
 
@@ -44,6 +45,7 @@ function App() {
         uploadProgress={uploadProgress}
         currentFolder={currentFolder}
         onFolderChange={setCurrentFolder}
+        onCreateFolder={handleCreateFolder}
       />
 
       {showViewer && selectedDoc ? (

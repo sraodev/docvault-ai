@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { FileText, File, Loader2, ChevronRight, Home, Folder, X } from 'lucide-react'
+import { FileText, File, Loader2, ChevronRight, Archive, Folder, X } from 'lucide-react'
 import { clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import { Document } from '../types'
@@ -66,13 +66,13 @@ export function DocumentViewer({ document, onClose, onNavigateToFolder }: Docume
                             onClick={onClose}
                             className="flex items-center gap-1 text-slate-500 hover:text-slate-700 transition-colors"
                         >
-                            <Home className="w-4 h-4" />
-                            <span>Documents</span>
+                            <Archive className="w-4 h-4" />
+                            <span>My Vault</span>
                         </button>
                     ) : (
                         <button className="flex items-center gap-1 text-slate-500 hover:text-slate-700 transition-colors">
-                            <Home className="w-4 h-4" />
-                            <span>Documents</span>
+                            <Archive className="w-4 h-4" />
+                            <span>My Vault</span>
                         </button>
                     )}
                     {folderBreadcrumbs.map((folderPart, index) => {
