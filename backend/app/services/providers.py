@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, List
 import anthropic
 from openai import OpenAI
 from ..core.config import (
@@ -17,6 +17,7 @@ class AIProvider(ABC):
     @abstractmethod
     def generate_markdown(self, text: str) -> str:
         pass
+    
 
 class OpenRouterProvider(AIProvider):
     def __init__(self):

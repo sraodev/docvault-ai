@@ -305,6 +305,25 @@ class MemoryAdapter(DatabaseInterface):
         
         return moved_count
     
+    async def get_documents_missing_summaries(self, limit: Optional[int] = None) -> List[Dict]:
+        """Get documents that are missing summaries (summary is None or empty)."""
+        results = []
+        
+        for doc in self._documents.values():
+            summary = doc.get("summary")
+            # Check if summary is None, empty string, or missing
+            if not summary or (isinstance(summary, str) and not summary.strip()):
+                results.append(copy.deepcopy(doc))
+        
+        # Sort by upload_date (newest first) for better UX
+        results.sort(key=lambda x: x.get("upload_date", ""), reverse=True)
+        
+        # Apply limit if specified
+        if limit is not None and limit > 0:
+            results = results[:limit]
+        
+        return results
+    
     def get_stats(self) -> Dict:
         """Get statistics about the in-memory database (useful for debugging)."""
         return {

@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 
 class DocumentMetadata(BaseModel):
     id: str
@@ -13,3 +13,4 @@ class DocumentMetadata(BaseModel):
     checksum: Optional[str] = None  # SHA-256 checksum for duplicate detection
     size: Optional[int] = None  # File size in bytes
     modified_date: Optional[str] = None  # Last modified date (defaults to upload_date)
+    tags: Optional[List[str]] = None  # Tags extracted from document content

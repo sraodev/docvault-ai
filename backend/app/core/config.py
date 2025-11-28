@@ -19,7 +19,7 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 AI_PROVIDER = os.getenv("AI_PROVIDER", "openrouter")
 
 # Database configuration
-DATABASE_TYPE = os.getenv("DATABASE_TYPE", "json")  # Options: 'json', 'memory'
+DATABASE_TYPE = os.getenv("DATABASE_TYPE", "scalable_json")  # Options: 'json', 'scalable_json', 'memory'
 
 # JSON database configuration
 JSON_DB_PATH = os.getenv("JSON_DB_PATH")  # Path to JSON database directory

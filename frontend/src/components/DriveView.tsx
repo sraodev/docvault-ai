@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { Grid, List, Search, MoreVertical, Download, Share2, Trash2, FileText, Folder, Image, File, Upload, ChevronRight, Archive, Move, X } from 'lucide-react'
+import { Grid, List, Search, Download, Share2, Trash2, FileText, Folder, Image, File, Upload, ChevronRight, Archive, User, Settings, LogOut, Bell, HelpCircle, ChevronDown } from 'lucide-react'
 import { clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import { Document } from '../types'
@@ -52,6 +52,8 @@ function getStatusColor(status: string): string {
     switch (status) {
         case 'uploading':
             return 'bg-red-50 border-red-200'
+        case 'ready':
+            return 'bg-slate-50 border-slate-200'
         case 'processing':
             return 'bg-orange-50 border-orange-200'
         case 'completed':
@@ -73,30 +75,30 @@ function getStatusColor(status: string): string {
  */
 function getFolderStatus(folderPath: string, documents: Document[]): string {
     // Get all documents in this folder and subfolders (recursive)
-    const folderDocs = documents.filter(doc => 
-        doc.folder === folderPath || 
+    const folderDocs = documents.filter(doc =>
+        doc.folder === folderPath ||
         (doc.folder && doc.folder.startsWith(`${folderPath}/`))
     )
-    
+
     if (folderDocs.length === 0) {
         return 'completed' // Empty folder is considered completed
     }
-    
+
     // Check if any file is uploading (highest priority)
     if (folderDocs.some(doc => doc.status === 'uploading')) {
         return 'uploading'
     }
-    
+
     // Check if any file is processing
     if (folderDocs.some(doc => doc.status === 'processing')) {
         return 'processing'
     }
-    
+
     // Check if any file failed
     if (folderDocs.some(doc => doc.status === 'failed')) {
         return 'failed'
     }
-    
+
     // All files are completed
     return 'completed'
 }
@@ -111,20 +113,20 @@ function getFolderStatus(folderPath: string, documents: Document[]): string {
  * @returns Object with status and optional progress percentage (0-100)
  */
 function getFolderProgress(
-    folderPath: string, 
-    documents: Document[], 
+    folderPath: string,
+    documents: Document[],
     uploadProgress?: Map<string, number>
 ): { status: string; progress?: number } {
     // Get all documents in this folder and subfolders (recursive)
-    const folderDocs = documents.filter(doc => 
-        doc.folder === folderPath || 
+    const folderDocs = documents.filter(doc =>
+        doc.folder === folderPath ||
         (doc.folder && doc.folder.startsWith(`${folderPath}/`))
     )
-    
+
     if (folderDocs.length === 0) {
         return { status: 'completed', progress: 100 }
     }
-    
+
     // Check if any file is uploading - calculate average progress
     const uploadingDocs = folderDocs.filter(doc => doc.status === 'uploading')
     if (uploadingDocs.length > 0) {
@@ -138,17 +140,17 @@ function getFolderProgress(
         const avgProgress = Math.round(totalProgress / uploadingDocs.length)
         return { status: 'uploading', progress: avgProgress }
     }
-    
+
     // Check if any file is processing (no progress percentage, just status)
     if (folderDocs.some(doc => doc.status === 'processing')) {
         return { status: 'processing' }
     }
-    
+
     // Check if any file failed
     if (folderDocs.some(doc => doc.status === 'failed')) {
         return { status: 'failed' }
     }
-    
+
     // All files are completed
     return { status: 'completed', progress: 100 }
 }
@@ -163,21 +165,17 @@ interface DriveViewProps {
     currentFolder?: string | null
     onFolderChange?: (folder: string | null) => void
     onDeleteFolder?: (folderPath: string) => Promise<void>
-    onMoveFolder?: (folderPath: string, newFolderPath: string | null) => Promise<void>
 }
 
-export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUpload, uploadProgress, currentFolder: propCurrentFolder, onFolderChange, onDeleteFolder, onMoveFolder }: DriveViewProps) {
+export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUpload, uploadProgress, currentFolder: propCurrentFolder, onFolderChange, onDeleteFolder }: DriveViewProps) {
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
     const [searchQuery, setSearchQuery] = useState('')
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
     const [hoveredId, setHoveredId] = useState<string | null>(null)
     const [isDragging, setIsDragging] = useState(false)
     const [internalCurrentFolder, setInternalCurrentFolder] = useState<string | null>(null)
-    const [folderActionMenu, setFolderActionMenu] = useState<string | null>(null)
-    const [showMoveDialog, setShowMoveDialog] = useState(false)
-    const [moveFolderPath, setMoveFolderPath] = useState<string | null>(null)
-    const [newFolderPath, setNewFolderPath] = useState<string>('')
-    
+    const [showProfileMenu, setShowProfileMenu] = useState(false)
+
     // Use prop if provided, otherwise use internal state
     const currentFolder = propCurrentFolder !== undefined ? propCurrentFolder : internalCurrentFolder
     const setCurrentFolder = (folder: string | null) => {
@@ -209,7 +207,7 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
     // Filter documents by current folder and search query
     const filteredDocs = useMemo(() => {
         let filtered = documents
-        
+
         // Filter by current folder
         if (currentFolder) {
             filtered = filtered.filter(doc => doc.folder === currentFolder)
@@ -217,14 +215,14 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
             // Show only root documents (no folder) when at root
             filtered = filtered.filter(doc => !doc.folder)
         }
-        
+
         // Filter by search query (search in extracted filename)
         if (searchQuery) {
             filtered = filtered.filter(doc =>
                 extractFilename(doc.filename).toLowerCase().includes(searchQuery.toLowerCase())
             )
         }
-        
+
         return filtered
     }, [documents, currentFolder, searchQuery])
 
@@ -238,7 +236,7 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
         // e.g., if currentFolder is "folder1/subfolder1", show "folder1/subfolder1/subfolder2"
         const prefix = `${currentFolder}/`
         const immediateSubfolders = new Set<string>()
-        
+
         folders.forEach(folder => {
             if (folder.startsWith(prefix)) {
                 // Get the part after the prefix
@@ -250,7 +248,7 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                 }
             }
         })
-        
+
         return Array.from(immediateSubfolders).sort()
     }, [folders, currentFolder])
 
@@ -278,7 +276,7 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
         e.preventDefault()
         e.stopPropagation()
         // Allow both files and directories to be dropped
-        if (e.dataTransfer.types.includes('Files') || 
+        if (e.dataTransfer.types.includes('Files') ||
             Array.from(e.dataTransfer.items).some(item => {
                 const entry = item.webkitGetAsEntry()
                 return entry && (entry.isFile || entry.isDirectory)
@@ -296,7 +294,7 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
         const x = e.clientX
         const y = e.clientY
-        
+
         // Only set dragging to false if we're outside the container bounds
         if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
             setIsDragging(false)
@@ -349,11 +347,11 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                     const entries = await new Promise<any[]>((resolve, reject) => {
                         reader.readEntries(resolve, reject)
                     })
-                    
+
                     const folderName = entry.name
                     // Build nested folder path (e.g., "folder1/subfolder")
                     const newBasePath = basePath ? `${basePath}/${folderName}` : folderName
-                    
+
                     // Process all entries in the directory (files and subdirectories)
                     for (const subEntry of entries) {
                         await processEntry(subEntry, newBasePath)
@@ -374,7 +372,7 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                 // DataTransfer API allows us to create a FileList programmatically
                 const dataTransfer = new DataTransfer()
                 allFiles.forEach(file => dataTransfer.items.add(file))
-                
+
                 /**
                  * Creates a function that returns the folder path for each file.
                  * Preserves folder structure and prepends current folder if navigating within one.
@@ -387,18 +385,18 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                     }
                     return currentFolder || undefined
                 }
-                
+
                 await onUpload(dataTransfer.files, getFolderPath)
             }
         } else if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
             // Regular file upload or files with webkitRelativePath (from webkitdirectory input)
             // This handles files dropped from folder input elements (not direct folder drag)
             const files = Array.from(e.dataTransfer.files)
-            
+
             // Check if any file has webkitRelativePath (indicates folder drag & drop from input element)
             // webkitRelativePath is set when using <input type="file" webkitdirectory>
             const hasFolderStructure = files.some(file => (file as any).webkitRelativePath)
-            
+
             if (hasFolderStructure) {
                 /**
                  * Extract folder path from each file's webkitRelativePath.
@@ -406,13 +404,13 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                  */
                 const getFolderPath = (file: File): string | undefined => {
                     const relativePath = (file as any).webkitRelativePath
-                    
+
                     if (!relativePath) {
                         return currentFolder || undefined
                     }
-                    
+
                     const pathParts = relativePath.split('/')
-                    
+
                     if (pathParts.length > 1) {
                         // Remove filename to get folder path
                         let folderPath = pathParts.slice(0, -1).join('/')
@@ -424,7 +422,7 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                     }
                     return currentFolder || undefined
                 }
-                
+
                 await onUpload(e.dataTransfer.files, getFolderPath)
             } else {
                 // Regular file upload (no folder structure) - upload to current folder if in one
@@ -440,29 +438,15 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
     // Get breadcrumb path
     const breadcrumbPath = currentFolder ? currentFolder.split('/') : []
 
-    // Get available folders for move dialog
-    const availableFolders = useMemo(() => {
-        const folderSet = new Set<string>()
-        documents.forEach(doc => {
-            if (doc.folder) {
-                const parts = doc.folder.split('/').filter(p => p.trim() !== '')
-                for (let i = 0; i < parts.length; i++) {
-                    folderSet.add(parts.slice(0, i + 1).join('/'))
-                }
-            }
-        })
-        return Array.from(folderSet).sort()
-    }, [documents])
 
     const handleDeleteFolderClick = async (folderPath: string) => {
-        const folderDocs = documents.filter(doc => 
-            doc.folder === folderPath || 
+        const folderDocs = documents.filter(doc =>
+            doc.folder === folderPath ||
             (doc.folder && doc.folder.startsWith(`${folderPath}/`))
         )
         const count = folderDocs.length
-        
+
         if (!window.confirm(`Are you sure you want to delete this folder?\n\nThis will delete ${count} ${count === 1 ? 'item' : 'items'} including all files and subfolders.`)) {
-            setFolderActionMenu(null)
             return
         }
 
@@ -472,131 +456,189 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
             } else {
                 await api.deleteFolder(folderPath)
             }
-            
+
             // Navigate away if we're currently viewing this folder or a subfolder
             if (currentFolder && (currentFolder === folderPath || currentFolder.startsWith(`${folderPath}/`))) {
                 // Navigate to parent folder or root
                 const parentPath = folderPath.split('/').slice(0, -1).join('/')
                 setCurrentFolder(parentPath || null)
             }
-            
-            setFolderActionMenu(null)
         } catch (err: any) {
             console.error("Delete folder failed", err)
             const errorMsg = err.response?.data?.detail || err.message || "Failed to delete folder"
             alert(errorMsg)
-            setFolderActionMenu(null)
-        }
-    }
-
-    const handleMoveFolderClick = (folderPath: string) => {
-        setMoveFolderPath(folderPath)
-        setNewFolderPath('')
-        setShowMoveDialog(true)
-        setFolderActionMenu(null)
-    }
-
-    const handleMoveFolderConfirm = async () => {
-        if (!moveFolderPath) return
-        
-        const targetPath = newFolderPath.trim() || null
-        
-        // Don't allow moving to itself or a subfolder
-        if (targetPath && (targetPath === moveFolderPath || targetPath.startsWith(`${moveFolderPath}/`))) {
-            alert("Cannot move folder into itself or a subfolder")
-            return
-        }
-
-        try {
-            if (onMoveFolder) {
-                await onMoveFolder(moveFolderPath, targetPath)
-            } else {
-                await api.moveFolder(moveFolderPath, targetPath)
-            }
-            setShowMoveDialog(false)
-            setMoveFolderPath(null)
-            setNewFolderPath('')
-        } catch (err) {
-            console.error("Move folder failed", err)
-            // Error already shown in handler
         }
     }
 
     // Close menu when clicking outside
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (folderActionMenu && !(event.target as Element).closest('.folder-action-menu')) {
-                setFolderActionMenu(null)
+            if (showProfileMenu && !(event.target as Element).closest('.profile-menu-container')) {
+                setShowProfileMenu(false)
             }
         }
         document.addEventListener('mousedown', handleClickOutside)
         return () => document.removeEventListener('mousedown', handleClickOutside)
-    }, [folderActionMenu])
+    }, [showProfileMenu])
 
     return (
-        <div 
-            className="flex-1 flex flex-col bg-white relative"
+        <div
+            className="flex-1 flex flex-col bg-gradient-to-br from-white via-slate-50/30 to-blue-50/20 relative"
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
         >
-            {/* Search Bar and View Toggle */}
-            <div className="border-b border-slate-200 px-6 py-3 bg-white flex items-center gap-4">
-                <div className="relative flex-1 max-w-md">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input
-                        type="text"
-                        placeholder="Search in My Vault"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
+            {/* Header Bar - Search, View Toggle, and Profile */}
+            <div className="h-[76px] px-6 bg-white/80 backdrop-blur-sm flex items-center justify-between gap-4 shadow-soft">
+                {/* Left: Search Bar */}
+                <div className="flex-1 flex justify-center">
+                    <div className="relative max-w-md w-full group">
+                        <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-primary-600 transition-colors" />
+                        <input
+                            type="text"
+                            placeholder="Search documents..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full pl-12 pr-4 py-3 border-2 border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 bg-white hover:border-slate-300"
+                        />
+                    </div>
                 </div>
 
-                {/* View Toggle */}
-                <div className="flex items-center gap-1 border border-slate-300 rounded-lg p-1">
+                {/* Right: View Toggle and Profile */}
+                <div className="flex items-center gap-3">
+                    {/* View Toggle */}
+                    <div className="flex items-center gap-1 border-2 border-slate-200 rounded-xl p-1 bg-slate-50/50">
+                        <button
+                            onClick={() => setViewMode('grid')}
+                            className={cn(
+                                "p-2 rounded-lg transition-all duration-200",
+                                viewMode === 'grid' ? "bg-gradient-to-r from-primary-600 to-indigo-600 text-white shadow-md" : "text-slate-600 hover:bg-white hover:text-primary-600"
+                            )}
+                            title="Grid view"
+                        >
+                            <Grid className="w-5 h-5" />
+                        </button>
+                        <button
+                            onClick={() => setViewMode('list')}
+                            className={cn(
+                                "p-2 rounded-lg transition-all duration-200",
+                                viewMode === 'list' ? "bg-gradient-to-r from-primary-600 to-indigo-600 text-white shadow-md" : "text-slate-600 hover:bg-white hover:text-primary-600"
+                            )}
+                            title="List view"
+                        >
+                            <List className="w-5 h-5" />
+                        </button>
+                    </div>
+
+                    {/* Notifications */}
                     <button
-                        onClick={() => setViewMode('grid')}
-                        className={cn(
-                            "p-1.5 rounded transition-colors",
-                            viewMode === 'grid' ? "bg-blue-50 text-blue-600" : "text-slate-600 hover:bg-slate-100"
-                        )}
-                        title="Grid view"
+                        className="relative p-2 rounded-lg hover:bg-slate-100 transition-all duration-200 group"
+                        title="Notifications"
                     >
-                        <Grid className="w-4 h-4" />
+                        <Bell className="w-5 h-5 text-slate-600 group-hover:text-primary-600 transition-colors" />
+                        <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
                     </button>
-                    <button
-                        onClick={() => setViewMode('list')}
-                        className={cn(
-                            "p-1.5 rounded transition-colors",
-                            viewMode === 'list' ? "bg-blue-50 text-blue-600" : "text-slate-600 hover:bg-slate-100"
+
+                    {/* Profile Menu */}
+                    <div className="relative profile-menu-container">
+                        <button
+                            onClick={() => setShowProfileMenu(!showProfileMenu)}
+                            className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-100 transition-all duration-200 group"
+                        >
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-sm shadow-sm">
+                                S
+                            </div>
+                            <ChevronDown className={cn(
+                                "w-4 h-4 text-slate-600 transition-transform duration-200",
+                                showProfileMenu && "transform rotate-180"
+                            )} />
+                        </button>
+
+                        {/* Profile Dropdown */}
+                        {showProfileMenu && (
+                            <div className="absolute right-0 mt-2 w-56 bg-white/95 backdrop-blur-md border border-slate-200 rounded-xl shadow-2xl z-50 overflow-hidden animate-slide-down profile-menu-container">
+                                {/* User Info */}
+                                <div className="px-4 py-3 border-b border-slate-200 bg-gradient-to-r from-primary-50/50 to-indigo-50/30">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-indigo-600 flex items-center justify-center text-white font-semibold shadow-sm">
+                                            S
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-semibold text-slate-900">Sri</p>
+                                            <p className="text-xs text-slate-500">sri@example.com</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Menu Items */}
+                                <div className="py-2">
+                                    <button
+                                        onClick={() => {
+                                            setShowProfileMenu(false)
+                                            // Handle account settings
+                                        }}
+                                        className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 flex items-center gap-3 transition-all group"
+                                    >
+                                        <User className="w-4 h-4 text-slate-500 group-hover:text-primary-600 transition-colors" />
+                                        <span>My Account</span>
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setShowProfileMenu(false)
+                                            // Handle settings
+                                        }}
+                                        className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 flex items-center gap-3 transition-all group"
+                                    >
+                                        <Settings className="w-4 h-4 text-slate-500 group-hover:text-primary-600 transition-colors" />
+                                        <span>Settings</span>
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setShowProfileMenu(false)
+                                            // Handle help
+                                        }}
+                                        className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 flex items-center gap-3 transition-all group"
+                                    >
+                                        <HelpCircle className="w-4 h-4 text-slate-500 group-hover:text-primary-600 transition-colors" />
+                                        <span>Help & Support</span>
+                                    </button>
+                                    <div className="border-t border-slate-200 my-1"></div>
+                                    <button
+                                        onClick={() => {
+                                            setShowProfileMenu(false)
+                                            // Handle logout
+                                        }}
+                                        className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-3 transition-all group"
+                                    >
+                                        <LogOut className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                                        <span>Sign Out</span>
+                                    </button>
+                                </div>
+                            </div>
                         )}
-                        title="List view"
-                    >
-                        <List className="w-4 h-4" />
-                    </button>
+                    </div>
                 </div>
             </div>
 
             {/* Breadcrumb Navigation */}
             {breadcrumbPath.length > 0 && (
-                <div className="border-b border-slate-200 px-6 py-2 bg-slate-50">
-                    <nav className="flex items-center gap-1 text-sm">
+                <div className="border-b border-slate-200/80 px-6 py-4 bg-gradient-to-r from-blue-50 via-indigo-50/50 to-purple-50/30 backdrop-blur-sm">
+                    <nav className="flex items-center gap-2 text-sm">
                         <button
                             onClick={() => setCurrentFolder(null)}
-                            className="flex items-center gap-1 text-slate-600 hover:text-slate-900 transition-colors"
+                            className="flex items-center gap-2 text-slate-600 hover:text-primary-600 transition-all duration-200 font-medium px-2 py-1 rounded-lg hover:bg-white/60 group"
                         >
-                            <Archive className="w-4 h-4" />
+                            <Archive className="w-4 h-4 group-hover:scale-110 transition-transform" />
                             <span>My Vault</span>
                         </button>
                         {breadcrumbPath.map((folder, index) => {
                             const path = breadcrumbPath.slice(0, index + 1).join('/')
                             return (
-                                <div key={path} className="flex items-center gap-1">
+                                <div key={path} className="flex items-center gap-2">
                                     <ChevronRight className="w-4 h-4 text-slate-400" />
                                     <button
                                         onClick={() => setCurrentFolder(path)}
-                                        className="text-slate-600 hover:text-slate-900 transition-colors"
+                                        className="text-slate-600 hover:text-primary-600 transition-all duration-200 font-medium px-2 py-1 rounded-lg hover:bg-white/60"
                                     >
                                         {folder}
                                     </button>
@@ -609,23 +651,23 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
 
             {/* Toolbar - Actions */}
             {selectedIds.size > 0 && (
-                <div className="border-b border-slate-200 px-6 py-3 flex items-center justify-end">
-                    <div className="flex items-center gap-2">
-                        <span className="text-sm text-slate-600">{selectedIds.size} selected</span>
-                        <button className="p-2 hover:bg-slate-100 rounded-full">
-                            <Download className="w-4 h-4 text-slate-600" />
+                <div className="border-b border-slate-200/80 px-6 py-3 flex items-center justify-end bg-gradient-to-r from-primary-50/50 to-indigo-50/30 animate-slide-down">
+                    <div className="flex items-center gap-3">
+                        <span className="text-sm font-medium text-slate-700 px-3 py-1.5 bg-white rounded-lg shadow-soft">{selectedIds.size} selected</span>
+                        <button className="p-2 hover:bg-white rounded-lg transition-all hover:shadow-soft group">
+                            <Download className="w-5 h-5 text-slate-600 group-hover:text-primary-600 transition-colors" />
                         </button>
-                        <button className="p-2 hover:bg-slate-100 rounded-full">
-                            <Share2 className="w-4 h-4 text-slate-600" />
+                        <button className="p-2 hover:bg-white rounded-lg transition-all hover:shadow-soft group">
+                            <Share2 className="w-5 h-5 text-slate-600 group-hover:text-primary-600 transition-colors" />
                         </button>
-                        <button 
+                        <button
                             onClick={() => {
                                 selectedIds.forEach(id => onDelete(id))
                                 setSelectedIds(new Set())
                             }}
-                            className="p-2 hover:bg-red-50 rounded-full"
+                            className="p-2 hover:bg-danger-50 rounded-lg transition-all hover:shadow-soft group"
                         >
-                            <Trash2 className="w-4 h-4 text-red-600" />
+                            <Trash2 className="w-5 h-5 text-danger-600 group-hover:scale-110 transition-transform" />
                         </button>
                     </div>
                 </div>
@@ -639,42 +681,42 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                         {subfolders.map((folderPath) => {
                             const folderName = folderPath.split('/').pop() || folderPath
                             // Count documents directly in this folder AND in all subfolders
-                            const folderDocCount = documents.filter(doc => 
-                                doc.folder === folderPath || 
+                            const folderDocCount = documents.filter(doc =>
+                                doc.folder === folderPath ||
                                 (doc.folder && doc.folder.startsWith(`${folderPath}/`))
                             ).length
-                            
+
                             const folderStatus = getFolderStatus(folderPath, documents)
                             const folderProgress = getFolderProgress(folderPath, documents, uploadProgress)
                             const statusColor = getStatusColor(folderStatus)
                             const folderIconColor = folderStatus === 'uploading' ? 'text-red-600' :
-                                                   folderStatus === 'processing' ? 'text-orange-600' :
-                                                   folderStatus === 'completed' ? 'text-blue-600' :
-                                                   'text-slate-600'
+                                folderStatus === 'processing' ? 'text-orange-600' :
+                                    folderStatus === 'completed' ? 'text-blue-600' :
+                                        'text-slate-600'
                             const isUploading = folderStatus === 'uploading' || folderStatus === 'processing'
-                            
-                            const isMenuOpen = folderActionMenu === folderPath
-                            
+
+
                             return (
                                 <div
                                     key={folderPath}
                                     onMouseEnter={() => setHoveredId(`folder-${folderPath}`)}
                                     onMouseLeave={() => setHoveredId(null)}
                                     className={cn(
-                                        "relative group cursor-pointer rounded-lg border-2 hover:border-slate-300 hover:shadow-md transition-all overflow-hidden",
-                                        statusColor || "bg-slate-50 border-slate-200"
+                                        "relative group cursor-pointer rounded-2xl border-2 hover:border-primary-300 hover:shadow-large transition-all duration-300 overflow-hidden card-hover",
+                                        statusColor || "bg-gradient-to-br from-white to-slate-50/50 border-slate-200 shadow-soft"
                                     )}
                                 >
                                     {/* Folder Icon - Clickable to navigate */}
-                                    <div 
+                                    <div
                                         onClick={() => setCurrentFolder(folderPath)}
-                                        className="p-6 flex flex-col items-center justify-center min-h-[120px] w-full"
+                                        className="p-6 flex flex-col items-center justify-center min-h-[140px] w-full relative"
                                     >
-                                        <Folder className={cn("w-12 h-12", folderIconColor)} />
-                                        <p className="mt-3 text-xs font-medium text-slate-700 text-center line-clamp-2 px-2 break-words w-full min-w-0 max-w-full">
+                                        <div className="absolute inset-0 bg-gradient-to-br from-primary-50/0 to-indigo-50/0 group-hover:from-primary-50/50 group-hover:to-indigo-50/30 transition-all duration-300"></div>
+                                        <Folder className={cn("w-14 h-14 relative z-10 transition-all duration-300 group-hover:scale-110", folderIconColor)} />
+                                        <p className="mt-4 text-sm font-semibold text-slate-700 text-center line-clamp-2 px-2 break-words w-full min-w-0 max-w-full relative z-10">
                                             {folderName}
                                         </p>
-                                        <p className="mt-1 text-xs text-slate-500">
+                                        <p className="mt-1.5 text-xs text-slate-500 font-medium relative z-10">
                                             {folderDocCount} {folderDocCount === 1 ? 'item' : 'items'}
                                         </p>
                                     </div>
@@ -690,130 +732,26 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                                         </div>
                                     )}
 
-                                    {/* Action Menu Button */}
-                                    <div className="absolute top-2 right-2 z-10 folder-action-menu">
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation()
-                                                setFolderActionMenu(isMenuOpen ? null : folderPath)
-                                            }}
-                                            className="p-1.5 bg-white rounded-full shadow-md hover:bg-slate-100 opacity-0 group-hover:opacity-100 transition-opacity"
-                                            title="Folder actions"
-                                        >
-                                            <MoreVertical className="w-4 h-4 text-slate-600" />
-                                        </button>
+                                    {/* Delete Button - Same as file cards */}
+                                    {hoveredId === `folder-${folderPath}` && (
+                                        <div className="absolute top-2 right-2 flex gap-1">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    handleDeleteFolderClick(folderPath)
+                                                }}
+                                                className="p-1.5 bg-white rounded-full shadow-lg hover:bg-red-50 hover:shadow-xl transition-all duration-200"
+                                                title="Delete"
+                                            >
+                                                <Trash2 className="w-3 h-3 text-red-600" />
+                                            </button>
+                                        </div>
+                                    )}
 
-                                        {/* Action Menu Dropdown */}
-                                        {isMenuOpen && (
-                                            <div className="absolute right-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        handleMoveFolderClick(folderPath)
-                                                    }}
-                                                    className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 flex items-center gap-2"
-                                                >
-                                                    <Move className="w-4 h-4" />
-                                                    Move Folder
-                                                </button>
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        handleDeleteFolderClick(folderPath)
-                                                    }}
-                                                    className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                    Delete Folder
-                                                </button>
-                    </div>
-                )}
-            </div>
-
-            {/* Move Folder Dialog */}
-            {showMoveDialog && moveFolderPath && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-semibold text-slate-900">Move Folder</h3>
-                            <button
-                                onClick={() => {
-                                    setShowMoveDialog(false)
-                                    setMoveFolderPath(null)
-                                    setNewFolderPath('')
-                                }}
-                                className="p-1 hover:bg-slate-100 rounded-full"
-                            >
-                                <X className="w-5 h-5 text-slate-500" />
-                            </button>
-                        </div>
-                        
-                        <div className="mb-4">
-                            <p className="text-sm text-slate-600 mb-2">
-                                Moving: <span className="font-medium text-slate-900">{moveFolderPath.split('/').pop()}</span>
-                            </p>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">
-                                Destination Folder (leave empty for root):
-                            </label>
-                            <input
-                                type="text"
-                                value={newFolderPath}
-                                onChange={(e) => setNewFolderPath(e.target.value)}
-                                placeholder="e.g., My Vault/Projects"
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                autoFocus
-                            />
-                            {availableFolders.length > 0 && (
-                                <div className="mt-2">
-                                    <p className="text-xs text-slate-500 mb-1">Available folders:</p>
-                                    <div className="max-h-32 overflow-y-auto border border-slate-200 rounded p-2">
-                                        <button
-                                            onClick={() => setNewFolderPath('')}
-                                            className="w-full text-left px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 rounded"
-                                        >
-                                            (Root)
-                                        </button>
-                                        {availableFolders
-                                            .filter(f => f !== moveFolderPath && !f.startsWith(`${moveFolderPath}/`))
-                                            .map(folder => (
-                                                <button
-                                                    key={folder}
-                                                    onClick={() => setNewFolderPath(folder)}
-                                                    className="w-full text-left px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 rounded"
-                                                >
-                                                    {folder}
-                                                </button>
-                                            ))}
-                                    </div>
                                 </div>
-                            )}
-                        </div>
+                            )
+                        })}
 
-                        <div className="flex justify-end gap-2">
-                            <button
-                                onClick={() => {
-                                    setShowMoveDialog(false)
-                                    setMoveFolderPath(null)
-                                    setNewFolderPath('')
-                                }}
-                                className="px-4 py-2 text-sm text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleMoveFolderConfirm}
-                                className="px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
-                            >
-                                Move
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
-    )
-})}
-                        
                         {/* Display Documents */}
                         {filteredDocs.map((doc) => {
                             const isSelected = selectedIds.has(doc.id)
@@ -829,9 +767,9 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                                     onMouseLeave={() => setHoveredId(null)}
                                     onClick={() => !isSelected && onSelect(doc)}
                                     className={cn(
-                                        "relative group cursor-pointer rounded-lg border-2 transition-all",
-                                        isSelected ? "border-blue-500 bg-blue-50" : "border-slate-200 hover:border-slate-300 hover:shadow-md",
-                                        statusColor || fileTypeColor
+                                        "relative group cursor-pointer rounded-xl border-2 transition-all duration-200",
+                                        isSelected ? "border-blue-500 bg-blue-50 shadow-md" : "border-slate-200 hover:border-blue-300 hover:shadow-lg",
+                                        statusColor || fileTypeColor || "bg-white shadow-sm"
                                     )}
                                 >
                                     {/* Checkbox */}
@@ -861,7 +799,7 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                                                 </p>
                                             )}
                                             <p className="text-xs text-slate-400">
-                                                {doc.modified_date 
+                                                {doc.modified_date
                                                     ? new Date(doc.modified_date).toLocaleDateString()
                                                     : new Date(doc.upload_date).toLocaleDateString()}
                                             </p>
@@ -887,17 +825,17 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                                                     e.stopPropagation()
                                                     onSelect(doc)
                                                 }}
-                                                className="p-1.5 bg-white rounded-full shadow-md hover:bg-slate-50"
+                                                className="p-1.5 bg-white rounded-full shadow-lg hover:bg-blue-50 hover:shadow-xl transition-all duration-200"
                                                 title="Open"
                                             >
-                                                <FileText className="w-3 h-3 text-slate-600" />
+                                                <FileText className="w-3 h-3 text-blue-600" />
                                             </button>
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation()
                                                     onDelete(doc.id)
                                                 }}
-                                                className="p-1.5 bg-white rounded-full shadow-md hover:bg-red-50"
+                                                className="p-1.5 bg-white rounded-full shadow-lg hover:bg-red-50 hover:shadow-xl transition-all duration-200"
                                                 title="Delete"
                                             >
                                                 <Trash2 className="w-3 h-3 text-red-600" />
@@ -911,7 +849,7 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                             <div className="col-span-full flex flex-col items-center justify-center py-16 text-slate-400">
                                 <Upload className="w-12 h-12 mb-4 text-slate-300" />
                                 <p className="text-lg font-medium text-slate-600 mb-2">
-                                    {searchQuery ? 'No files found' : currentFolder ? 'This folder is empty' : 'My Vault is empty'}
+                                    {searchQuery ? 'No files found' : currentFolder ? 'This folder is empty' : 'DocVaultAI is empty'}
                                 </p>
                                 {!searchQuery && (
                                     <p className="text-sm text-slate-500">
@@ -945,47 +883,46 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                         {subfolders.map((folderPath) => {
                             const folderName = folderPath.split('/').pop() || folderPath
                             // Count documents directly in this folder AND in all subfolders
-                            const folderDocCount = documents.filter(doc => 
-                                doc.folder === folderPath || 
+                            const folderDocCount = documents.filter(doc =>
+                                doc.folder === folderPath ||
                                 (doc.folder && doc.folder.startsWith(`${folderPath}/`))
                             ).length
-                            
+
                             const folderStatus = getFolderStatus(folderPath, documents)
                             const folderProgress = getFolderProgress(folderPath, documents, uploadProgress)
                             const statusBgColor = folderStatus === 'uploading' ? 'bg-red-50' :
-                                                  folderStatus === 'processing' ? 'bg-orange-50' :
-                                                  folderStatus === 'completed' ? 'bg-blue-50' :
-                                                  folderStatus === 'failed' ? 'bg-red-50' : ''
+                                folderStatus === 'processing' ? 'bg-orange-50' :
+                                    folderStatus === 'completed' ? 'bg-blue-50' :
+                                        folderStatus === 'failed' ? 'bg-red-50' : ''
                             const borderColor = folderStatus === 'uploading' ? 'border-red-400' :
-                                              folderStatus === 'processing' ? 'border-orange-400' :
-                                              folderStatus === 'completed' ? 'border-blue-400' :
-                                              folderStatus === 'failed' ? 'border-red-400' : 'border-slate-300'
+                                folderStatus === 'processing' ? 'border-orange-400' :
+                                    folderStatus === 'completed' ? 'border-blue-400' :
+                                        folderStatus === 'failed' ? 'border-red-400' : 'border-slate-300'
                             const folderIconColor = folderStatus === 'uploading' ? 'text-red-600' :
-                                                   folderStatus === 'processing' ? 'text-orange-600' :
-                                                   folderStatus === 'completed' ? 'text-blue-600' :
-                                                   'text-slate-600'
+                                folderStatus === 'processing' ? 'text-orange-600' :
+                                    folderStatus === 'completed' ? 'text-blue-600' :
+                                        'text-slate-600'
                             const isUploading = folderStatus === 'uploading' || folderStatus === 'processing'
-                            
-                            const isMenuOpen = folderActionMenu === folderPath
-                            
+
+
                             return (
                                 <div
                                     key={folderPath}
                                     onMouseEnter={() => setHoveredId(`folder-${folderPath}`)}
                                     onMouseLeave={() => setHoveredId(null)}
                                     className={cn(
-                                        "grid grid-cols-12 gap-4 px-4 py-3 rounded-lg cursor-pointer transition-colors group border-l-4 relative folder-action-menu",
+                                        "grid grid-cols-12 gap-4 px-4 py-3 rounded-lg cursor-pointer transition-colors group border-l-4 relative",
                                         statusBgColor || "hover:bg-slate-50",
                                         borderColor
                                     )}
                                 >
-                                    <div 
+                                    <div
                                         onClick={() => setCurrentFolder(folderPath)}
                                         className="col-span-1 flex items-center"
                                     >
                                         <Folder className={cn("w-5 h-5", folderIconColor)} />
                                     </div>
-                                    <div 
+                                    <div
                                         onClick={() => setCurrentFolder(folderPath)}
                                         className="col-span-5 flex items-center gap-3"
                                     >
@@ -1007,19 +944,19 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                                             </div>
                                         </div>
                                     </div>
-                                    <div 
+                                    <div
                                         onClick={() => setCurrentFolder(folderPath)}
                                         className="col-span-2 flex items-center text-sm text-slate-600"
                                     >
                                         Folder
                                     </div>
-                                    <div 
+                                    <div
                                         onClick={() => setCurrentFolder(folderPath)}
                                         className="col-span-2 flex items-center text-sm text-slate-600"
                                     >
                                         -
                                     </div>
-                                    <div 
+                                    <div
                                         onClick={() => setCurrentFolder(folderPath)}
                                         className="col-span-1 flex items-center text-sm text-slate-600"
                                     >
@@ -1029,51 +966,28 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation()
-                                                setFolderActionMenu(isMenuOpen ? null : folderPath)
+                                                handleDeleteFolderClick(folderPath)
                                             }}
-                                            className="p-1 rounded hover:bg-slate-200 opacity-0 group-hover:opacity-100 transition-opacity"
-                                            title="Folder actions"
+                                            className="p-1 rounded-full hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                                            title="Delete"
                                         >
-                                            <MoreVertical className="w-4 h-4 text-slate-600" />
+                                            <Trash2 className="w-4 h-4 text-red-600" />
                                         </button>
-                                        {isMenuOpen && (
-                                            <div className="absolute right-4 top-full mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        handleMoveFolderClick(folderPath)
-                                                    }}
-                                                    className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 flex items-center gap-2"
-                                                >
-                                                    <Move className="w-4 h-4" />
-                                                    Move Folder
-                                                </button>
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        handleDeleteFolderClick(folderPath)
-                                                    }}
-                                                    className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                    Delete Folder
-                                                </button>
-                                            </div>
-                                        )}
                                         <ChevronRight className="w-4 h-4 text-slate-400" />
                                     </div>
                                 </div>
                             )
                         })}
-                        
+
                         {/* Display Documents */}
                         {filteredDocs.map((doc) => {
                             const isSelected = selectedIds.has(doc.id)
                             const isUploading = doc.status === 'uploading' || doc.status === 'processing'
                             const statusBgColor = doc.status === 'uploading' ? 'bg-red-50' :
-                                                  doc.status === 'processing' ? 'bg-orange-50' :
-                                                  doc.status === 'completed' ? 'bg-blue-50' :
-                                                  doc.status === 'failed' ? 'bg-red-50' : ''
+                                doc.status === 'ready' ? 'bg-slate-50' :
+                                    doc.status === 'processing' ? 'bg-orange-50' :
+                                        doc.status === 'completed' ? 'bg-blue-50' :
+                                            doc.status === 'failed' ? 'bg-red-50' : ''
 
                             return (
                                 <div
@@ -1119,7 +1033,7 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                                         Me
                                     </div>
                                     <div className="col-span-2 flex items-center text-sm text-slate-600">
-                                        {doc.modified_date 
+                                        {doc.modified_date
                                             ? new Date(doc.modified_date).toLocaleDateString()
                                             : new Date(doc.upload_date).toLocaleDateString()}
                                     </div>
@@ -1133,8 +1047,9 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                                                 onDelete(doc.id)
                                             }}
                                             className="p-1 rounded-full hover:bg-slate-200 opacity-0 group-hover:opacity-100 transition-opacity"
+                                            title="Delete file"
                                         >
-                                            <MoreVertical className="w-4 h-4 text-slate-600" />
+                                            <Trash2 className="w-4 h-4 text-slate-600" />
                                         </button>
                                     </div>
                                 </div>
@@ -1144,7 +1059,7 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                             <div className="flex flex-col items-center justify-center py-16 text-slate-400">
                                 <Upload className="w-12 h-12 mb-4 text-slate-300" />
                                 <p className="text-lg font-medium text-slate-600 mb-2">
-                                    {searchQuery ? 'No files found' : currentFolder ? 'This folder is empty' : 'My Vault is empty'}
+                                    {searchQuery ? 'No files found' : currentFolder ? 'This folder is empty' : 'DocVaultAI is empty'}
                                 </p>
                                 {!searchQuery && (
                                     <p className="text-sm text-slate-500">
@@ -1159,8 +1074,8 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
 
             {/* Drag and Drop Overlay */}
             {isDragging && (
-                <div className="absolute inset-0 z-50 bg-blue-500/10 border-4 border-dashed border-blue-500 rounded-lg flex items-center justify-center pointer-events-none">
-                    <div className="bg-white rounded-lg shadow-xl p-8 flex flex-col items-center gap-4">
+                <div className="absolute inset-0 z-50 bg-blue-500/10 border-4 border-dashed border-blue-500 rounded-xl flex items-center justify-center pointer-events-none backdrop-blur-sm">
+                    <div className="bg-white rounded-xl shadow-2xl p-8 flex flex-col items-center gap-4 border border-blue-200">
                         <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center">
                             <Upload className="w-8 h-8 text-blue-600" />
                         </div>
@@ -1171,6 +1086,25 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                     </div>
                 </div>
             )}
+
+            {/* Footer with Copyright */}
+            <footer className="border-t border-slate-200/80 bg-white/80 backdrop-blur-sm px-6 py-4 mt-auto">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-slate-500">
+                    <div className="flex items-center gap-6">
+                        <span>© {new Date().getFullYear()} DocVaultAI. All rights reserved.</span>
+                        <div className="hidden sm:flex items-center gap-4">
+                            <a href="#" className="hover:text-primary-600 transition-colors">Privacy Policy</a>
+                            <a href="#" className="hover:text-primary-600 transition-colors">Terms of Service</a>
+                            <a href="#" className="hover:text-primary-600 transition-colors">Support</a>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-slate-400">
+                        <span>Version 1.0.0</span>
+                        <span>•</span>
+                        <span>Powered by AI</span>
+                    </div>
+                </div>
+            </footer>
         </div>
     )
 }

@@ -3,7 +3,7 @@ export interface Document {
     filename: string
     upload_date: string
     file_path: string
-    status: 'uploading' | 'processing' | 'completed' | 'failed'
+    status: 'uploading' | 'ready' | 'processing' | 'completed' | 'failed'
     summary?: string
     markdown_path?: string
     folder?: string  // Virtual folder/category for organization
@@ -11,4 +11,5 @@ export interface Document {
     uploadProgress?: number  // 0-100 for upload progress
     size?: number  // File size in bytes
     modified_date?: string  // Last modified date
+    tags?: string[]  // Tags extracted from document content
 }

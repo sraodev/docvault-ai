@@ -23,4 +23,12 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Configure uvicorn for large file uploads (100-200 files)
+    uvicorn.run(
+        app, 
+        host="0.0.0.0", 
+        port=8000,
+        limit_concurrency=1000,  # Allow more concurrent connections
+        timeout_keep_alive=600,  # 10 minutes keep-alive for long bulk uploads
+        log_level="info"
+    )

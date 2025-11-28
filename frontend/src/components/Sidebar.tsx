@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { FileText, FolderPlus, Upload, FolderOpen, Plus, ChevronDown, ChevronRight, Folder, File, Archive } from 'lucide-react'
+import { FileText, FolderPlus, Upload, FolderOpen, Plus, ChevronDown, ChevronRight, Folder, File, Archive, Trash2 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import { Document } from '../types'
@@ -22,6 +22,7 @@ interface SidebarProps {
     currentFolder?: string | null
     onFolderChange?: (folder: string | null) => void
     onCreateFolder?: (folderName: string, parentFolder?: string | null) => Promise<void>
+    onDeleteFolder?: (folderPath: string) => Promise<void>
 }
 
 export function Sidebar({
@@ -35,15 +36,15 @@ export function Sidebar({
     uploadProgress,
     currentFolder,
     onFolderChange,
-    onCreateFolder
+    onCreateFolder,
+    onDeleteFolder
 }: SidebarProps) {
     const fileInputRef = useRef<HTMLInputElement>(null)
     const folderInputRef = useRef<HTMLInputElement>(null)
     const [newFolderName, setNewFolderName] = useState('')
     const [showNewFolderInput, setShowNewFolderInput] = useState(false)
     const [showNewMenu, setShowNewMenu] = useState(false)
-    const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
-    const [allFolders, setAllFolders] = useState<string[]>([])
+    const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(['root']))
 
     const handleNewFolder = () => {
         setShowNewMenu(false)
@@ -64,17 +65,14 @@ export function Sidebar({
         }
 
         try {
-            console.log("Creating folder:", trimmedName, "in parent:", currentFolder)
             // Create folder with current folder as parent (if in a folder)
             await onCreateFolder(trimmedName, currentFolder || null)
-            console.log("Folder created successfully")
             setNewFolderName('')
             setShowNewFolderInput(false)
         } catch (err: any) {
             // Error is already shown via alert in the hook
             // Just keep the input open so user can retry
             console.error("Failed to create folder:", err)
-            // Don't clear the input so user can see what they typed
         }
     }
 
@@ -127,6 +125,12 @@ export function Sidebar({
         e.target.value = ''
     }
 
+    // Calculate total files count (only files, excluding folders)
+    const totalFilesCount = useMemo(() => {
+        // documents array contains only file documents, not folders
+        return documents.length
+    }, [documents])
+
     // Build folder tree structure
     const folderTree = useMemo(() => {
         interface FolderNode {
@@ -143,28 +147,7 @@ export function Sidebar({
             subfolders: new Map()
         }
 
-        // First, build folder structure from all folders (including empty ones)
-        allFolders.forEach(folderPath => {
-            if (!folderPath) return
-            
-            const parts = folderPath.split('/').filter(p => p.trim() !== '')
-            let current = root
-
-            parts.forEach((part, index) => {
-                if (!current.subfolders.has(part)) {
-                    const fullPath = parts.slice(0, index + 1).join('/')
-                    current.subfolders.set(part, {
-                        name: part,
-                        fullPath,
-                        files: [],
-                        subfolders: new Map()
-                    })
-                }
-                current = current.subfolders.get(part)!
-            })
-        })
-
-        // Then, add documents to their respective folders
+        // Build folder structure from documents
         documents.forEach(doc => {
             if (!doc.folder) {
                 root.files.push(doc)
@@ -191,7 +174,7 @@ export function Sidebar({
         })
 
         return root
-    }, [documents, allFolders])
+    }, [documents])
 
     const toggleFolder = (folderPath: string) => {
         const newExpanded = new Set(expandedFolders)
@@ -199,6 +182,16 @@ export function Sidebar({
             newExpanded.delete(folderPath)
         } else {
             newExpanded.add(folderPath)
+        }
+        setExpandedFolders(newExpanded)
+    }
+
+    const toggleRoot = () => {
+        const newExpanded = new Set(expandedFolders)
+        if (newExpanded.has('root')) {
+            newExpanded.delete('root')
+        } else {
+            newExpanded.add('root')
         }
         setExpandedFolders(newExpanded)
     }
@@ -231,14 +224,15 @@ export function Sidebar({
         }
 
         return (
-            <div key={node.fullPath} className="mb-0.5">
+            <div key={node.fullPath} className="mb-1">
                 <div
                     className={cn(
-                        "flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors group",
-                        "hover:bg-slate-100",
-                        isActive && "bg-blue-50 text-blue-700"
+                        "flex items-center gap-2 px-3 py-2 rounded-xl cursor-pointer transition-all duration-200 group border-2",
+                        isActive
+                            ? "bg-white border-primary-200 shadow-soft"
+                            : "border-transparent hover:bg-slate-50 hover:border-slate-200"
                     )}
-                    style={{ paddingLeft: `${8 + level * 16}px` }}
+                    style={{ paddingLeft: `${12 + level * 16}px` }}
                     onClick={() => {
                         toggleFolder(node.fullPath)
                         handleFolderClick(node.fullPath)
@@ -246,34 +240,63 @@ export function Sidebar({
                 >
                     {node.subfolders.size > 0 ? (
                         isExpanded ? (
-                            <ChevronDown className="w-3 h-3 shrink-0 text-slate-500" />
+                            <ChevronDown className="w-3.5 h-3.5 shrink-0 text-slate-500 group-hover:text-primary-600 transition-colors" />
                         ) : (
-                            <ChevronRight className="w-3 h-3 shrink-0 text-slate-500" />
+                            <ChevronRight className="w-3.5 h-3.5 shrink-0 text-slate-500 group-hover:text-primary-600 transition-colors" />
                         )
                     ) : (
-                        <div className="w-3 h-3 shrink-0" />
+                        <div className="w-3.5 h-3.5 shrink-0" />
                     )}
                     {isExpanded ? (
-                        <FolderOpen className={cn("w-4 h-4 shrink-0", isActive ? "text-blue-600" : "text-indigo-500")} />
+                        <FolderOpen className={cn("w-4 h-4 shrink-0 transition-transform group-hover:scale-110", isActive ? "text-primary-600" : "text-blue-500")} />
                     ) : (
-                        <Folder className={cn("w-4 h-4 shrink-0", isActive ? "text-blue-600" : "text-slate-500")} />
+                        <Folder className={cn("w-4 h-4 shrink-0 transition-transform group-hover:scale-110", isActive ? "text-primary-600" : "text-slate-500")} />
                     )}
                     <span className={cn(
-                        "text-xs font-medium flex-1 truncate",
+                        "text-sm font-medium flex-1 truncate transition-colors",
+                        isActive ? "text-primary-700" : "text-slate-600 group-hover:text-slate-900",
                         isActive && "font-semibold"
                     )} title={node.name}>
                         {node.name}
                     </span>
                     {(node.files.length > 0 || node.subfolders.size > 0) && (
-                        <span className="text-xs text-slate-400 shrink-0">
+                        <span className={cn(
+                            "text-xs shrink-0 px-1.5 py-0.5 rounded-full",
+                            isActive ? "bg-primary-100 text-primary-700" : "bg-slate-100 text-slate-500"
+                        )}>
                             {node.files.length + Array.from(node.subfolders.values()).reduce((sum, sub) => sum + sub.files.length, 0)}
                         </span>
+                    )}
+                    {onDeleteFolder && (
+                        <button
+                            onClick={async (e) => {
+                                e.stopPropagation()
+                                const count = node.files.length + Array.from(node.subfolders.values()).reduce((sum, sub) => sum + sub.files.length + (sub.subfolders.size > 0 ? 1 : 0), 0)
+                                if (window.confirm(`Are you sure you want to delete this folder?\n\nThis will delete ${count} ${count === 1 ? 'item' : 'items'} including all files and subfolders.`)) {
+                                    try {
+                                        if (onDeleteFolder) {
+                                            await onDeleteFolder(node.fullPath)
+                                        } else {
+                                            await api.deleteFolder(node.fullPath)
+                                        }
+                                    } catch (err: any) {
+                                        console.error("Delete folder failed", err)
+                                        const errorMsg = err.response?.data?.detail || err.message || "Failed to delete folder"
+                                        alert(errorMsg)
+                                    }
+                                }
+                            }}
+                            className="p-1 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all shrink-0"
+                            title="Delete folder"
+                        >
+                            <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                     )}
                 </div>
 
                 {/* Render files and subfolders when expanded */}
                 {isExpanded && (
-                    <div className="mt-0.5">
+                    <div className="mt-1 space-y-0.5">
                         {/* Render files */}
                         {node.files.map((doc) => {
                             const isSelected = selectedDocId === doc.id
@@ -285,23 +308,35 @@ export function Sidebar({
                                         onSelect(doc)
                                     }}
                                     className={cn(
-                                        "flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors group",
+                                        "flex items-center gap-2 px-3 py-2 rounded-xl cursor-pointer transition-all duration-200 group border-2",
                                         isSelected
-                                            ? "bg-indigo-50 text-indigo-700"
-                                            : "hover:bg-slate-50",
+                                            ? "bg-white border-primary-200 shadow-soft"
+                                            : "border-transparent hover:bg-slate-50 hover:border-slate-200",
                                     )}
-                                    style={{ paddingLeft: `${24 + level * 16}px` }}
+                                    style={{ paddingLeft: `${28 + level * 16}px` }}
                                 >
                                     <File className={cn(
-                                        "w-3.5 h-3.5 shrink-0",
-                                        isSelected ? "text-indigo-600" : "text-slate-500"
+                                        "w-4 h-4 shrink-0 transition-transform group-hover:scale-110",
+                                        isSelected ? "text-primary-600" : "text-slate-500"
                                     )} />
-                                    <span 
-                                        className="text-xs flex-1 truncate" 
+                                    <span
+                                        className="text-sm flex-1 truncate"
                                         title={doc.filename}
                                     >
                                         {extractFilename(doc.filename)}
                                     </span>
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            if (window.confirm(`Are you sure you want to delete "${extractFilename(doc.filename)}"?`)) {
+                                                onDelete(doc.id)
+                                            }
+                                        }}
+                                        className="p-1 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all shrink-0"
+                                        title="Delete file"
+                                    >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
                                 </div>
                             )
                         })}
@@ -328,16 +363,17 @@ export function Sidebar({
     }, [showNewMenu])
 
     return (
-        <div className="w-64 bg-white border-r border-slate-200 flex flex-col">
-            <div className="p-4 border-b border-slate-200">
-                <h1 className="text-xl font-semibold flex items-center gap-3 text-slate-900">
-                    <Archive className="w-7 h-7 text-blue-600" />
-                    My Vault
+        <div className="w-64 bg-white/95 backdrop-blur-sm border-r border-slate-200/80 flex flex-col shadow-lg">
+
+            <div className="h-[76px] px-6 border-b border-slate-200/80 bg-white flex items-center">
+                <h1 className="text-xl font-bold flex items-center gap-3 animate-fade-in">
+                    <FileText className="w-7 h-7 text-primary-600" />
+                    <span className="bg-gradient-to-r from-primary-600 to-indigo-600 bg-clip-text text-transparent">DocVaultAI</span>
                 </h1>
             </div>
 
             {/* + New Button with Dropdown */}
-            <div className="px-2 py-2 border-b border-slate-200 relative new-menu-container">
+            <div className="px-6 py-2 relative new-menu-container bg-gradient-to-b from-white to-slate-50/50">
                 {showNewFolderInput ? (
                     <div className="space-y-2 mb-2">
                         <input
@@ -351,13 +387,13 @@ export function Sidebar({
                                 }
                             }}
                             placeholder="Folder name"
-                            className="w-full px-2 py-1.5 text-xs border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
                             autoFocus
                         />
-                        <div className="flex gap-1">
+                        <div className="flex gap-2">
                             <button
                                 onClick={handleCreateFolder}
-                                className="flex-1 px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                                className="flex-1 px-3 py-2 text-sm bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-lg hover:from-primary-700 hover:to-primary-800 transition-all shadow-sm hover:shadow-md font-medium"
                             >
                                 Create
                             </button>
@@ -366,7 +402,7 @@ export function Sidebar({
                                     setShowNewFolderInput(false)
                                     setNewFolderName('')
                                 }}
-                                className="flex-1 px-2 py-1 text-xs bg-slate-200 text-slate-700 rounded hover:bg-slate-300"
+                                className="flex-1 px-3 py-2 text-sm bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-all font-medium"
                             >
                                 Cancel
                             </button>
@@ -376,43 +412,45 @@ export function Sidebar({
                     <>
                         <button
                             onClick={() => setShowNewMenu(!showNewMenu)}
-                            className="w-full px-3 py-2 rounded-lg hover:bg-slate-100 text-slate-700 flex items-center justify-between transition-colors"
+                            className="w-full px-3 py-1.5 bg-white border-2 border-slate-200 text-slate-700 rounded-lg hover:border-primary-300 hover:shadow-sm active:scale-98 flex items-center justify-between transition-all duration-200 font-medium shadow-sm group"
                         >
                             <div className="flex items-center gap-2">
-                                <Plus className="w-4 h-4" />
-                                <span className="text-sm font-medium">New</span>
+                                <div className="p-1 bg-primary-50 rounded-md group-hover:bg-primary-100 transition-colors">
+                                    <Plus className="w-3.5 h-3.5 text-primary-600" />
+                                </div>
+                                <span className="text-xs group-hover:text-primary-700 transition-colors">New</span>
                             </div>
                             <ChevronDown className={cn(
-                                "w-4 h-4 transition-transform",
+                                "w-3.5 h-3.5 transition-transform duration-200",
                                 showNewMenu && "transform rotate-180"
                             )} />
                         </button>
 
                         {/* Dropdown Menu */}
                         {showNewMenu && (
-                            <div className="absolute left-2 right-2 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 overflow-hidden">
+                            <div className="absolute left-6 right-6 mt-2 bg-white/95 backdrop-blur-md border border-slate-200 rounded-xl shadow-2xl z-50 overflow-hidden animate-slide-down">
                                 <button
                                     onClick={handleNewFolder}
-                                    className="w-full text-left px-3 py-2 hover:bg-slate-100 text-slate-700 flex items-center gap-3 transition-colors"
+                                    className="w-full text-left px-4 py-3 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 text-slate-700 flex items-center gap-3 transition-all duration-200 group"
                                 >
-                                    <FolderPlus className="w-4 h-4" />
-                                    <span className="text-sm">New Folder</span>
+                                    <FolderPlus className="w-5 h-5 text-primary-600 group-hover:scale-110 transition-transform" />
+                                    <span className="text-sm font-medium">New Folder</span>
                                 </button>
                                 <button
                                     onClick={handleFileUpload}
                                     disabled={isUploading}
-                                    className="w-full text-left px-3 py-2 hover:bg-slate-100 text-slate-700 flex items-center gap-3 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="w-full text-left px-4 py-3 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 text-slate-700 flex items-center gap-3 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed group"
                                 >
-                                    <Upload className="w-4 h-4" />
-                                    <span className="text-sm">File Upload</span>
+                                    <Upload className="w-5 h-5 text-primary-600 group-hover:scale-110 transition-transform" />
+                                    <span className="text-sm font-medium">File Upload</span>
                                 </button>
                                 <button
                                     onClick={handleFolderUpload}
                                     disabled={isUploading}
-                                    className="w-full text-left px-3 py-2 hover:bg-slate-100 text-slate-700 flex items-center gap-3 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="w-full text-left px-4 py-3 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 text-slate-700 flex items-center gap-3 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed group"
                                 >
-                                    <FolderOpen className="w-4 h-4" />
-                                    <span className="text-sm">Folder Upload</span>
+                                    <FolderOpen className="w-5 h-5 text-primary-600 group-hover:scale-110 transition-transform" />
+                                    <span className="text-sm font-medium">Folder Upload</span>
                                 </button>
                             </div>
                         )}
@@ -421,34 +459,99 @@ export function Sidebar({
             </div>
 
             {/* Navigation - Folder Tree */}
-            <div className="flex-1 overflow-y-auto py-2">
-                <nav className="space-y-1 px-2">
-                    {/* Root "My Vault" button */}
-                    <button 
-                        onClick={() => handleFolderClick(null)}
-                        className={cn(
-                            "w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100 text-slate-700 flex items-center gap-3 transition-colors",
-                            (currentFolder === null || currentFolder === undefined) && "bg-blue-50 text-blue-700 font-semibold"
-                        )}
-                    >
-                        <Archive className={cn(
-                            "w-5 h-5",
-                            (currentFolder === null || currentFolder === undefined) && "text-blue-600"
-                        )} />
-                        <span className="text-sm font-medium">My Vault</span>
-                    </button>
+            <div className="flex-1 overflow-y-auto py-3 bg-gradient-to-b from-transparent to-slate-50/30">
+                <nav className="space-y-1 px-3">
+                    {/* Root "My Vault" as Tree Root */}
+                    <div className="mb-1">
+                        <div
+                            className={cn(
+                                "flex items-center gap-2 px-3 py-2 rounded-xl cursor-pointer transition-all duration-200 group border-2",
+                                (currentFolder === null || currentFolder === undefined)
+                                    ? "bg-white border-primary-200 shadow-soft"
+                                    : "border-transparent hover:bg-slate-50 hover:border-slate-200"
+                            )}
+                            onClick={() => {
+                                toggleRoot()
+                                handleFolderClick(null)
+                            }}
+                        >
+                            {/* Expand/Collapse Chevron */}
+                            {(folderTree.subfolders.size > 0 || folderTree.files.length > 0) ? (
+                                expandedFolders.has('root') ? (
+                                    <ChevronDown className="w-3.5 h-3.5 shrink-0 text-slate-500 group-hover:text-primary-600 transition-colors" />
+                                ) : (
+                                    <ChevronRight className="w-3.5 h-3.5 shrink-0 text-slate-500 group-hover:text-primary-600 transition-colors" />
+                                )
+                            ) : (
+                                <div className="w-3.5 h-3.5 shrink-0" />
+                            )}
+                            {expandedFolders.has('root') ? (
+                                <Archive className={cn("w-4 h-4 shrink-0 transition-transform group-hover:scale-110", (currentFolder === null || currentFolder === undefined) ? "text-primary-600" : "text-blue-500")} />
+                            ) : (
+                                <Archive className={cn("w-4 h-4 shrink-0 transition-transform group-hover:scale-110", (currentFolder === null || currentFolder === undefined) ? "text-primary-600" : "text-slate-500")} />
+                            )}
+                            <span className={cn(
+                                "text-sm font-medium flex-1 truncate transition-colors",
+                                (currentFolder === null || currentFolder === undefined) ? "text-primary-700 font-semibold" : "text-slate-600 group-hover:text-slate-900"
+                            )} title="My Vault">
+                                My Vault
+                            </span>
+                            {totalFilesCount > 0 && (
+                                <span className={cn(
+                                    "text-xs shrink-0 px-1.5 py-0.5 rounded-full",
+                                    (currentFolder === null || currentFolder === undefined) ? "bg-primary-100 text-primary-700" : "bg-slate-100 text-slate-500"
+                                )}>
+                                    {totalFilesCount}
+                                </span>
+                            )}
+                        </div>
 
-                    {/* Folder Tree */}
-                    <div className="mt-2">
-                        {folderTree.subfolders.size > 0 || folderTree.files.length > 0 ? (
-                            <>
+                        {/* Tree Content - Show when expanded */}
+                        {expandedFolders.has('root') && (
+                            <div className="mt-1 space-y-0.5">
+                                {/* Render root-level files */}
+                                {folderTree.files.map((doc) => {
+                                    const isSelected = selectedDocId === doc.id
+                                    return (
+                                        <div
+                                            key={doc.id}
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                onSelect(doc)
+                                            }}
+                                            className={cn(
+                                                "flex items-center gap-2 px-3 py-2 rounded-xl cursor-pointer transition-all duration-200 group border-2",
+                                                isSelected
+                                                    ? "bg-white border-primary-200 shadow-soft"
+                                                    : "border-transparent hover:bg-slate-50 hover:border-slate-200",
+                                            )}
+                                            style={{ paddingLeft: `${28}px` }}
+                                        >
+                                            <File className={cn(
+                                                "w-4 h-4 shrink-0 transition-transform group-hover:scale-110",
+                                                isSelected ? "text-primary-600" : "text-slate-500"
+                                            )} />
+                                            <span
+                                                className="text-sm flex-1 truncate"
+                                                title={doc.filename}
+                                            >
+                                                {extractFilename(doc.filename)}
+                                            </span>
+                                        </div>
+                                    )
+                                })}
+
+                                {/* Render root-level folders */}
                                 {Array.from(folderTree.subfolders.values())
                                     .sort((a, b) => a.name.localeCompare(b.name))
                                     .map(subfolder => renderFolderNode(subfolder, 0))}
-                            </>
-                        ) : (
-                            <div className="px-3 py-8 text-center text-slate-400 text-xs">
-                                No folders yet
+
+                                {/* Show message if empty */}
+                                {folderTree.subfolders.size === 0 && folderTree.files.length === 0 && (
+                                    <div className="px-3 py-2 text-center text-slate-400 text-xs italic" style={{ paddingLeft: `${28}px` }}>
+                                        No folders or files yet
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>

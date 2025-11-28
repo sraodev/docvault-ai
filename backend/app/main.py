@@ -23,15 +23,7 @@ async def startup_event():
     UPLOAD_DIR.mkdir(exist_ok=True)
     
     # Initialize database adapter (plug-and-play)
-    print(f"🔌 Initializing database: {DATABASE_TYPE}")
     await documents.initialize_database()
-    print(f"✅ Database initialized: {DATABASE_TYPE}")
-    
-    # JSON and Memory databases don't need migrations
-    if DATABASE_TYPE.lower() == "json":
-        print("ℹ️  JSON database: No migrations needed (file-based JSON storage)")
-    elif DATABASE_TYPE.lower() == "memory":
-        print("ℹ️  Memory database: No migrations needed (in-memory, no persistence)")
 
 @app.get("/")
 async def root():

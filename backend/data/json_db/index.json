@@ -1,0 +1,54 @@
+{
+  "last_id": 0,
+  "documents": {
+    "685a81fc-e619-476d-9183-535e53fe1345": {
+      "filename": "EssentialC copy.pdf",
+      "folder": null,
+      "shard": "58000-58999",
+      "path": "documents/58000-58999/685a81fc-e619-476d-9183-535e53fe1345.json",
+      "updated": "2025-11-29T01:53:04.109761"
+    },
+    "e9b46dfe-0c97-4d95-8868-0e2f1282726a": {
+      "filename": ".DS_Store",
+      "folder": "OutMark/Code",
+      "shard": "56000-56999",
+      "path": "documents/56000-56999/e9b46dfe-0c97-4d95-8868-0e2f1282726a.json",
+      "updated": "2025-11-29T01:53:27.266208"
+    },
+    "9af42150-0ada-429c-8421-d0cc90a4d68f": {
+      "filename": ".DS_Store",
+      "folder": "OutMark",
+      "shard": "92000-92999",
+      "path": "documents/92000-92999/9af42150-0ada-429c-8421-d0cc90a4d68f.json",
+      "updated": "2025-11-29T01:53:27.273551"
+    },
+    "3a85e3f2-5b36-435a-b6c4-567e62ec0e9f": {
+      "filename": "TreeListRecursion.pdf",
+      "folder": "OutMark/Code",
+      "shard": "75000-75999",
+      "path": "documents/75000-75999/3a85e3f2-5b36-435a-b6c4-567e62ec0e9f.json",
+      "updated": "2025-11-29T01:53:27.305949"
+    },
+    "ad9b59e9-219f-4c90-9698-0485f339ed6f": {
+      "filename": "Resume_Srinivas_Rao_PrincipalEngineer.pdf",
+      "folder": "OutMark/Sri/Resume",
+      "shard": "15000-15999",
+      "path": "documents/15000-15999/ad9b59e9-219f-4c90-9698-0485f339ed6f.json",
+      "updated": "2025-11-29T01:53:27.335899"
+    },
+    "8f71943e-1ee6-4beb-ba4f-eb6c562189d8": {
+      "filename": ".DS_Store",
+      "folder": "OutMark/Sri",
+      "shard": "35000-35999",
+      "path": "documents/35000-35999/8f71943e-1ee6-4beb-ba4f-eb6c562189d8.json",
+      "updated": "2025-11-29T01:53:27.338580"
+    },
+    "61b49406-cb67-46b1-90e3-203a7da447ab": {
+      "filename": "AI Document Vault - Case Study.pdf",
+      "folder": "OutMark/DocX",
+      "shard": "94000-94999",
+      "path": "documents/94000-94999/61b49406-cb67-46b1-90e3-203a7da447ab.json",
+      "updated": "2025-11-29T01:53:27.380141"
+    }
+  }
+}

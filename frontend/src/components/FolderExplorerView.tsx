@@ -101,7 +101,7 @@ export function FolderExplorerView({
                                         <ChevronRight className="w-3 h-3 shrink-0 text-slate-500" />
                                     )}
                                     {isExpanded ? (
-                                        <FolderOpen className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                                        <FolderOpen className="w-3.5 h-3.5 text-blue-500 shrink-0" />
                                     ) : (
                                         <Folder className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                                     )}
@@ -126,13 +126,13 @@ export function FolderExplorerView({
                                                     className={cn(
                                                         "flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors group",
                                                         isSelected
-                                                            ? "bg-indigo-50 text-indigo-700"
+                                                            ? "bg-blue-50 text-blue-700"
                                                             : "hover:bg-slate-50"
                                                     )}
                                                 >
                                                     <File className={cn(
                                                         "w-3.5 h-3.5 shrink-0",
-                                                        isSelected ? "text-indigo-600" : "text-slate-500"
+                                                        isSelected ? "text-blue-600" : "text-slate-500"
                                                     )} />
                                                     <span 
                                                         className="text-xs flex-1 truncate" 

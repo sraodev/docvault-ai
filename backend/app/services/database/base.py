@@ -75,6 +75,11 @@ class DatabaseInterface(ABC):
         pass
     
     @abstractmethod
+    async def get_documents_missing_summaries(self, limit: Optional[int] = None) -> List[Dict]:
+        """Get documents that are missing summaries (summary is None or empty)."""
+        pass
+    
+    @abstractmethod
     async def initialize(self):
         """Initialize database (create tables/collections, indexes, etc.)."""
         pass

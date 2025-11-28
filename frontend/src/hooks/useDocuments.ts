@@ -30,16 +30,17 @@ export function useDocuments() {
             })
 
             // Update selected doc if it exists in the new list to keep status updated
-            if (selectedDoc) {
-                const updated = docs.find(d => d.id === selectedDoc.id)
-                if (updated) setSelectedDoc(updated)
-            }
+            setSelectedDoc(prevSelected => {
+                if (!prevSelected) return null
+                const updated = docs.find(d => d.id === prevSelected.id)
+                return updated || prevSelected
+            })
         } catch (err) {
             console.error("Failed to fetch documents", err)
         } finally {
             setIsLoading(false)
         }
-    }, [selectedDoc])
+    }, [])
 
     useEffect(() => {
         fetchDocuments()
@@ -208,12 +209,12 @@ export function useDocuments() {
      */
     const handleDeleteFolder = async (folderPath: string) => {
         // Count all documents in this folder and subfolders
-        const folderDocs = documents.filter(doc => 
-            doc.folder === folderPath || 
+        const folderDocs = documents.filter(doc =>
+            doc.folder === folderPath ||
             (doc.folder && doc.folder.startsWith(`${folderPath}/`))
         )
         const count = folderDocs.length
-        
+
         // Show confirmation dialog with item count
         if (!window.confirm(`Are you sure you want to delete this folder?\n\nThis will delete ${count} ${count === 1 ? 'item' : 'items'} including all files and subfolders.`)) {
             return
@@ -221,19 +222,19 @@ export function useDocuments() {
 
         try {
             await api.deleteFolder(folderPath)
-            
+
             // Remove all documents in this folder from state immediately
             // This provides instant UI feedback before server refresh
-            setDocuments(prev => prev.filter(doc => 
-                doc.folder !== folderPath && 
+            setDocuments(prev => prev.filter(doc =>
+                doc.folder !== folderPath &&
                 !(doc.folder && doc.folder.startsWith(`${folderPath}/`))
             ))
-            
+
             // Clear selected doc if it was in the deleted folder
             if (selectedDoc && (selectedDoc.folder === folderPath || (selectedDoc.folder && selectedDoc.folder.startsWith(`${folderPath}/`)))) {
                 setSelectedDoc(null)
             }
-            
+
             // Refresh documents from server to ensure consistency
             await fetchDocuments()
         } catch (err: any) {
@@ -244,23 +245,6 @@ export function useDocuments() {
         }
     }
 
-    /**
-     * Moves a folder and all its contents to a new location.
-     * 
-     * @param folderPath - The current folder path to move
-     * @param newFolderPath - The destination folder path (null for root)
-     */
-    const handleMoveFolder = async (folderPath: string, newFolderPath: string | null) => {
-        try {
-            await api.moveFolder(folderPath, newFolderPath)
-            // Refresh documents to show updated folder structure
-            await fetchDocuments()
-        } catch (err) {
-            console.error("Move folder failed", err)
-            alert("Failed to move folder")
-            throw err
-        }
-    }
 
     /**
      * Creates a new folder. Since folders are virtual (metadata only),
@@ -272,9 +256,7 @@ export function useDocuments() {
      */
     const handleCreateFolder = async (folderName: string, parentFolder?: string | null) => {
         try {
-            console.log("Hook: Creating folder", folderName, "parent:", parentFolder)
             const result = await api.createFolder(folderName, parentFolder)
-            console.log("Hook: Folder created, result:", result)
             // Refresh documents to ensure consistency
             // Note: Folder won't appear in tree until files are uploaded to it
             await fetchDocuments()
@@ -297,7 +279,6 @@ export function useDocuments() {
         handleUpload,
         handleDelete,
         handleDeleteFolder,
-        handleMoveFolder,
         handleCreateFolder,
         isLoading,
         uploadProgress

@@ -190,7 +190,8 @@ backend/app/services/storage/
 ├── local_storage.py          # Local filesystem implementation
 ├── s3_storage.py            # AWS S3 implementation
 ├── supabase_storage.py      # Supabase Storage implementation
-└── factory.py               # FileStorageFactory
+├── factory.py               # FileStorageFactory
+└── migrate_storage.py        # Storage migration utility
 ```
 
 ## Current Status
@@ -202,6 +203,7 @@ backend/app/services/storage/
 - ✅ Factory pattern implemented
 - ✅ FileService updated to use interface
 - ✅ Configuration system in place
+- ✅ **Migration utility** - Easy migration between storage backends
 
 ## Example Usage
 
@@ -234,19 +236,51 @@ All storage adapters support:
 
 ## Migration Guide
 
-### From Local to S3
+### Easy Migration Between Storage Backends
 
-1. Set up S3 bucket and credentials
-2. Set `STORAGE_TYPE=s3` and required env vars
+**Migrate files between any storage backends with one command!**
+
+#### Quick Migration
+
+```bash
+# Local → S3
+python -m app.services.storage.migrate_storage local s3
+
+# Local → Supabase
+python -m app.services.storage.migrate_storage local supabase
+
+# S3 → Supabase
+python -m app.services.storage.migrate_storage s3 supabase
+
+# Any combination works!
+```
+
+#### Dry Run (Preview)
+
+```bash
+# Preview what would be migrated
+python -m app.services.storage.migrate_storage local s3 --dry-run
+```
+
+#### Complete Migration Process
+
+1. **Set credentials** for destination storage
+2. **Run migration** command
+3. **Update `.env`** with new `STORAGE_TYPE`
+4. **Restart backend**
+
+**That's it!** All files are migrated automatically.
+
+See [STORAGE_MIGRATION_GUIDE.md](./STORAGE_MIGRATION_GUIDE.md) for detailed instructions.
+
+### Manual Migration (Legacy)
+
+If you prefer manual migration:
+
+1. Set up destination storage (S3 bucket or Supabase Storage)
+2. Set `STORAGE_TYPE` and required env vars
 3. Restart backend
-4. **Note:** Existing files in local storage won't automatically migrate - you'll need to re-upload or migrate manually
-
-### From Local to Supabase
-
-1. Set up Supabase Storage bucket
-2. Set `STORAGE_TYPE=supabase` and required env vars
-3. Restart backend
-4. **Note:** Existing files in local storage won't automatically migrate - you'll need to re-upload or migrate manually
+4. Re-upload files or use migration utility
 
 ## Best Practices
 
