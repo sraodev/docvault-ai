@@ -32,6 +32,23 @@ function App() {
     setSelectedDoc(null)
   }
 
+  const handleNavigateHome = () => {
+    // Close document viewer if open
+    setShowViewer(false)
+    setSelectedDoc(null)
+    // Navigate to root folder
+    setCurrentFolder(null)
+  }
+
+  const handleFolderChange = (folder: string | null) => {
+    // When folder changes from tree view, close document viewer if open
+    if (showViewer) {
+      setShowViewer(false)
+      setSelectedDoc(null)
+    }
+    setCurrentFolder(folder)
+  }
+
   return (
     <div className="flex h-screen bg-white font-sans text-slate-900">
       <Sidebar
@@ -45,9 +62,10 @@ function App() {
         uploadError={uploadError}
         uploadProgress={uploadProgress}
         currentFolder={currentFolder}
-        onFolderChange={setCurrentFolder}
+        onFolderChange={handleFolderChange}
         onCreateFolder={handleCreateFolder}
         onDeleteFolder={handleDeleteFolder}
+        onNavigateHome={handleNavigateHome}
       />
 
       {showViewer && selectedDoc ? (
@@ -58,6 +76,8 @@ function App() {
             setCurrentFolder(folder)
             handleCloseViewer()
           }}
+          onDeleteFolder={handleDeleteFolder}
+          documents={documents}
         />
       ) : (
         <DriveView

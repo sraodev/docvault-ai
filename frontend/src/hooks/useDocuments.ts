@@ -137,30 +137,52 @@ export function useDocuments() {
             })
 
             // Replace temporary documents with real ones
+            // Note: ZIP files may return more documents than original files (due to extraction)
             uploadedDocs.forEach((doc, index) => {
-                const tempId = tempDocIds[index]
-                const file = Array.from(files)[index]
-                if (file && tempId) {
-                    filenameToDocIdMap.set(file.name, doc.id)
-                    // Transfer progress from tempId to doc.id
-                    const fileProgress = progressMap.get(tempId) || 100
-                    progressMap.delete(tempId)
-                    progressMap.set(doc.id, fileProgress)
+                // For ZIP files, there may be more docs than temp IDs
+                // Use the doc's own ID for progress tracking
+                const docId = doc.id
+                
+                // Try to find matching temp ID if available
+                if (index < tempDocIds.length) {
+                    const tempId = tempDocIds[index]
+                    const file = Array.from(files)[index]
+                    if (file && tempId) {
+                        filenameToDocIdMap.set(file.name, docId)
+                        // Transfer progress from tempId to doc.id
+                        const fileProgress = progressMap.get(tempId) || 100
+                        progressMap.delete(tempId)
+                        progressMap.set(docId, fileProgress)
+                    }
+                } else {
+                    // For extracted files from ZIP, set progress directly
+                    progressMap.set(docId, 100)
                 }
 
                 setDocuments(prev => {
-                    // Remove temporary document and add real one
-                    const filtered = prev.filter(d => d.id !== tempId)
-                    const exists = filtered.find(d => d.id === doc.id)
+                    // Remove temporary document if it exists, then add/update real one
+                    const filtered = index < tempDocIds.length 
+                        ? prev.filter(d => d.id !== tempDocIds[index])
+                        : prev
+                    
+                    const exists = filtered.find(d => d.id === docId)
                     if (exists) {
                         return filtered.map(d =>
-                            d.id === doc.id
+                            d.id === docId
                                 ? { ...doc, status: 'processing' as const, uploadProgress: 100 }
                                 : d
                         )
                     }
                     return [...filtered, { ...doc, status: 'processing' as const, uploadProgress: 100 }]
                 })
+            })
+            
+            // Clean up any remaining temp IDs that weren't matched
+            tempDocIds.forEach((tempId, index) => {
+                if (index >= uploadedDocs.length) {
+                    progressMap.delete(tempId)
+                    setDocuments(prev => prev.filter(d => d.id !== tempId))
+                }
             })
 
             setUploadProgress(new Map(progressMap))
@@ -232,12 +254,19 @@ export function useDocuments() {
                 !(doc.folder && doc.folder.startsWith(`${folderPath}/`))
             ))
 
+            // Remove deleted folder and all subfolders from folders state immediately
+            setFolders(prev => prev.filter(folder =>
+                folder !== folderPath &&
+                !(folder && folder.startsWith(`${folderPath}/`))
+            ))
+
             // Clear selected doc if it was in the deleted folder
             if (selectedDoc && (selectedDoc.folder === folderPath || (selectedDoc.folder && selectedDoc.folder.startsWith(`${folderPath}/`)))) {
                 setSelectedDoc(null)
             }
 
-            // Refresh documents from server to ensure consistency
+            // Refresh documents and folders from server to ensure consistency
+            // This ensures the tree view is updated with the latest state
             await fetchDocuments()
         } catch (err: any) {
             console.error("Delete folder failed", err)

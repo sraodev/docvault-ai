@@ -12,4 +12,5 @@ export interface Document {
     size?: number  // File size in bytes
     modified_date?: string  // Last modified date
     tags?: string[]  // Tags extracted from document content
+    extracted_fields?: Record<string, any>  // Structured fields extracted by AI (e.g., invoice fields, resume fields)
 }

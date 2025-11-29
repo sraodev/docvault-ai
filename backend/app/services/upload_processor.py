@@ -47,12 +47,13 @@ class UploadProcessor:
             save_filename = f"{doc_id}{file_ext}"
             save_path = UPLOAD_DIR / save_filename
             
-            # Save file using storage adapter
-            await self.file_service.save_upload(task.file, save_path)
+            # Save file using storage adapter (use relative path)
+            save_path_relative = Path(save_filename)
+            await self.file_service.save_upload(task.file, save_path_relative)
             
             # Get file from storage and calculate checksum
             storage_adapter = await self.file_service.get_storage()
-            file_bytes = await storage_adapter.get_file(str(save_path))
+            file_bytes = await storage_adapter.get_file(str(save_path_relative))
             file_size = len(file_bytes)
             
             # Calculate checksum
@@ -65,7 +66,7 @@ class UploadProcessor:
             duplicate_doc = await self.db_service.find_document_by_checksum(file_checksum)
             if duplicate_doc:
                 # Delete the just uploaded file since it's a duplicate
-                await self.file_service.delete_file(save_path)
+                await self.file_service.delete_file(save_path_relative)
                 return {
                     "status": "duplicate",
                     "filename": task.filename,
@@ -76,13 +77,41 @@ class UploadProcessor:
             # Normalize folder name
             normalized_folder = task.folder.strip() if task.folder and task.folder.strip() else None
             
+            # Create folder records if folder path is provided
+            if normalized_folder:
+                try:
+                    # Check if folder already exists
+                    existing_folder = await self.db_service.get_folder(normalized_folder)
+                    if not existing_folder:
+                        # Create folder structure (handle nested folders)
+                        folder_parts = normalized_folder.split('/')
+                        # Create all parent folders first
+                        for i in range(1, len(folder_parts) + 1):
+                            parent_path = '/'.join(folder_parts[:i])
+                            parent_existing = await self.db_service.get_folder(parent_path)
+                            if not parent_existing:
+                                folder_name = folder_parts[i-1]
+                                parent_folder = '/'.join(folder_parts[:i-1]) if i > 1 else None
+                                
+                                folder_data = {
+                                    "name": folder_name,
+                                    "folder_path": parent_path,
+                                    "parent_folder": parent_folder.strip() if parent_folder and parent_folder.strip() else None,
+                                    "created_date": datetime.now().isoformat()
+                                }
+                                await self.db_service.create_folder(folder_data)
+                                print(f"Created folder: {parent_path}")
+                except Exception as folder_err:
+                    # Don't fail upload if folder creation fails
+                    print(f"Note: Folder creation skipped for '{normalized_folder}': {folder_err}")
+            
             # Create document metadata
             upload_time = datetime.now().isoformat()
             doc_meta = {
                 "id": doc_id,
                 "filename": Path(task.filename).name,  # Clean filename
                 "upload_date": upload_time,
-                "file_path": str(save_path),
+                "file_path": str(save_path_relative),  # Store relative path
                 "status": "processing",
                 "summary": None,
                 "markdown_path": None,

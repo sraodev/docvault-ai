@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 class DocumentMetadata(BaseModel):
     id: str
@@ -14,3 +14,5 @@ class DocumentMetadata(BaseModel):
     size: Optional[int] = None  # File size in bytes
     modified_date: Optional[str] = None  # Last modified date (defaults to upload_date)
     tags: Optional[List[str]] = None  # Tags extracted from document content
+    extracted_fields: Optional[Dict[str, Any]] = None  # Structured fields extracted by AI (e.g., invoice fields, resume fields)
+    embedding: Optional[List[float]] = None  # Vector embedding for semantic search

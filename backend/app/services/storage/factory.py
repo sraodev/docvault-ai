@@ -9,7 +9,7 @@ from typing import Optional
 from .base import FileStorageInterface
 from .local_storage import LocalFileStorage
 from .s3_storage import S3FileStorage
-from .supabase_storage import SupabaseFileStorage
+# Supabase import is conditional - only imported when needed
 
 class FileStorageFactory:
     """
@@ -110,8 +110,16 @@ class FileStorageFactory:
         )
     
     @staticmethod
-    def _create_supabase(**kwargs) -> SupabaseFileStorage:
+    def _create_supabase(**kwargs):
         """Create Supabase Storage adapter."""
+        try:
+            from .supabase_storage import SupabaseFileStorage
+        except ImportError:
+            raise ImportError(
+                "Supabase storage requires the 'supabase' package. "
+                "Install it with: pip install supabase"
+            )
+        
         supabase_url = kwargs.get(
             "supabase_url",
             os.getenv("SUPABASE_URL")

@@ -7,3 +7,4 @@ pypdf
 python-dotenv
 boto3
 supabase
+numpy

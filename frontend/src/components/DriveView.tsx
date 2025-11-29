@@ -55,7 +55,7 @@ function getStatusColor(status: string): string {
         case 'ready':
             return 'bg-slate-50 border-slate-200'
         case 'processing':
-            return 'bg-orange-50 border-orange-200'
+            return 'bg-orange-50 border-orange-300'
         case 'completed':
             return 'bg-blue-50 border-blue-200'
         case 'failed':
@@ -110,21 +110,24 @@ function getFolderStatus(folderPath: string, documents: Document[]): string {
  * @param folderPath - The folder path to check
  * @param documents - Array of all documents
  * @param uploadProgress - Optional map of document IDs to upload progress percentages
- * @returns Object with status and optional progress percentage (0-100)
+ * @returns Object with status, optional progress percentage (0-100), and counts (completed/total)
  */
 function getFolderProgress(
     folderPath: string,
     documents: Document[],
     uploadProgress?: Map<string, number>
-): { status: string; progress?: number } {
+): { status: string; progress?: number; completedCount?: number; totalCount?: number } {
     // Get all documents in this folder and subfolders (recursive)
     const folderDocs = documents.filter(doc =>
         doc.folder === folderPath ||
         (doc.folder && doc.folder.startsWith(`${folderPath}/`))
     )
 
+    const totalCount = folderDocs.length
+    const completedCount = folderDocs.filter(doc => doc.status === 'completed').length
+
     if (folderDocs.length === 0) {
-        return { status: 'completed', progress: 100 }
+        return { status: 'completed', progress: 100, completedCount: 0, totalCount: 0 }
     }
 
     // Check if any file is uploading - calculate average progress
@@ -138,21 +141,21 @@ function getFolderProgress(
             return sum + progress
         }, 0)
         const avgProgress = Math.round(totalProgress / uploadingDocs.length)
-        return { status: 'uploading', progress: avgProgress }
+        return { status: 'uploading', progress: avgProgress, completedCount, totalCount }
     }
 
-    // Check if any file is processing (no progress percentage, just status)
+    // Check if any file is processing (show completed/total count)
     if (folderDocs.some(doc => doc.status === 'processing')) {
-        return { status: 'processing' }
+        return { status: 'processing', completedCount, totalCount }
     }
 
     // Check if any file failed
     if (folderDocs.some(doc => doc.status === 'failed')) {
-        return { status: 'failed' }
+        return { status: 'failed', completedCount, totalCount }
     }
 
     // All files are completed
-    return { status: 'completed', progress: 100 }
+    return { status: 'completed', progress: 100, completedCount, totalCount }
 }
 
 interface DriveViewProps {
@@ -170,6 +173,8 @@ interface DriveViewProps {
 export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUpload, uploadProgress, currentFolder: propCurrentFolder, onFolderChange, onDeleteFolder }: DriveViewProps) {
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
     const [searchQuery, setSearchQuery] = useState('')
+    const [searchResults, setSearchResults] = useState<Document[]>([])
+    const [isSearching, setIsSearching] = useState(false)
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
     const [hoveredId, setHoveredId] = useState<string | null>(null)
     const [isDragging, setIsDragging] = useState(false)
@@ -204,8 +209,53 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
         return Array.from(folderSet).sort()
     }, [documents])
 
+    // Perform semantic search when query is provided
+    useEffect(() => {
+        if (searchQuery.trim().length > 0) {
+            setIsSearching(true)
+            const timeoutId = setTimeout(async () => {
+                try {
+                    const results = await api.semanticSearch(searchQuery.trim(), 50, 0.1)
+                    // Fetch full document details for each result
+                    const fullDocs: Document[] = []
+                    for (const result of results.results) {
+                        try {
+                            const doc = await api.getDocument(result.document_id)
+                            fullDocs.push(doc)
+                        } catch (err) {
+                            console.error(`Failed to fetch document ${result.document_id}:`, err)
+                        }
+                    }
+                    setSearchResults(fullDocs)
+                } catch (err) {
+                    console.error("Semantic search failed, falling back to text search:", err)
+                    // Fallback to simple text search
+                    const filtered = documents.filter(doc =>
+                        extractFilename(doc.filename).toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        doc.summary?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        doc.tags?.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
+                    )
+                    setSearchResults(filtered)
+                } finally {
+                    setIsSearching(false)
+                }
+            }, 500) // Debounce 500ms
+
+            return () => clearTimeout(timeoutId)
+        } else {
+            setSearchResults([])
+            setIsSearching(false)
+        }
+    }, [searchQuery, documents])
+
     // Filter documents by current folder and search query
     const filteredDocs = useMemo(() => {
+        // If searching, use search results (show all matches globally, ignore folder filter)
+        if (searchQuery.trim().length > 0) {
+            return searchResults
+        }
+
+        // Normal filtering when not searching
         let filtered = documents
 
         // Filter by current folder
@@ -216,15 +266,8 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
             filtered = filtered.filter(doc => !doc.folder)
         }
 
-        // Filter by search query (search in extracted filename)
-        if (searchQuery) {
-            filtered = filtered.filter(doc =>
-                extractFilename(doc.filename).toLowerCase().includes(searchQuery.toLowerCase())
-            )
-        }
-
         return filtered
-    }, [documents, currentFolder, searchQuery])
+    }, [documents, currentFolder, searchQuery, searchResults])
 
     // Get subfolders for current folder
     const subfolders = useMemo(() => {
@@ -316,10 +359,23 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
         // Check if we have directory entries (folder drag & drop from file system)
         // This uses the File System Access API to detect folder structures
         const items = Array.from(e.dataTransfer.items)
-        const hasDirectories = items.some(item => {
-            const entry = item.webkitGetAsEntry()
-            return entry && entry.isDirectory
+        console.log(`[Drag & Drop] Checking ${items.length} items for folder structure`)
+        
+        let hasDirectories = items.some(item => {
+            try {
+                const entry = item.webkitGetAsEntry()
+                const isDir = entry && entry.isDirectory
+                if (isDir) {
+                    console.log(`[Drag & Drop] Found directory: ${entry.name}`)
+                }
+                return isDir
+            } catch (err) {
+                console.warn(`[Drag & Drop] Error checking entry:`, err)
+                return false
+            }
         })
+        
+        console.log(`[Drag & Drop] Has directories: ${hasDirectories}`)
 
         if (hasDirectories) {
             // Handle folder drag & drop using File System Access API
@@ -334,102 +390,194 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
             const processEntry = async (entry: any, basePath: string = '') => {
                 if (entry.isFile) {
                     // Extract file and store with its folder path
-                    const file = await new Promise<File>((resolve, reject) => {
-                        entry.file((file: File) => resolve(file), reject)
-                    })
-                    allFiles.push(file)
-                    if (basePath) {
-                        filePaths.set(file, basePath)
+                    try {
+                        const file = await new Promise<File>((resolve, reject) => {
+                            entry.file((file: File) => resolve(file), reject)
+                        })
+                        allFiles.push(file)
+                        if (basePath) {
+                            filePaths.set(file, basePath)
+                        }
+                    } catch (err) {
+                        console.error(`Error processing file entry: ${err}`)
                     }
                 } else if (entry.isDirectory) {
                     // Recursively process directory contents
-                    const reader = entry.createReader()
-                    const entries = await new Promise<any[]>((resolve, reject) => {
-                        reader.readEntries(resolve, reject)
-                    })
+                    try {
+                        const reader = entry.createReader()
+                        
+                        // Read all entries (may require multiple reads)
+                        let entries: any[] = []
+                        let hasMore = true
+                        while (hasMore) {
+                            const batch = await new Promise<any[]>((resolve, reject) => {
+                                reader.readEntries((batch: any[]) => {
+                                    resolve(batch)
+                                }, reject)
+                            })
+                            entries.push(...batch)
+                            hasMore = batch.length > 0
+                        }
 
-                    const folderName = entry.name
-                    // Build nested folder path (e.g., "folder1/subfolder")
-                    const newBasePath = basePath ? `${basePath}/${folderName}` : folderName
+                        const folderName = entry.name
+                        // Build nested folder path (e.g., "folder1/subfolder")
+                        const newBasePath = basePath ? `${basePath}/${folderName}` : folderName
 
-                    // Process all entries in the directory (files and subdirectories)
-                    for (const subEntry of entries) {
-                        await processEntry(subEntry, newBasePath)
+                        // Process all entries in the directory (files and subdirectories)
+                        for (const subEntry of entries) {
+                            await processEntry(subEntry, newBasePath)
+                        }
+                    } catch (err) {
+                        console.error(`Error processing directory entry: ${err}`)
                     }
                 }
             }
 
             // Process all dropped items (could be files or folders)
-            for (const item of items) {
-                const entry = item.webkitGetAsEntry()
-                if (entry) {
-                    await processEntry(entry)
+            try {
+                for (const item of items) {
+                    try {
+                        const entry = item.webkitGetAsEntry()
+                        if (entry) {
+                            await processEntry(entry)
+                        } else {
+                            console.warn(`[Drag & Drop] Entry is null for item: ${item.type}`)
+                        }
+                    } catch (entryError) {
+                        console.error(`[Drag & Drop] Error getting entry:`, entryError)
+                        // Fallback: if webkitGetAsEntry fails, try to get files directly
+                        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                            console.log(`[Drag & Drop] Falling back to direct file access`)
+                            // This will be handled by the else branch below
+                            break
+                        }
+                    }
                 }
+            } catch (processError) {
+                console.error(`[Drag & Drop] Error processing entries:`, processError)
+                // Fallback to regular file handling
+                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                    console.log(`[Drag & Drop] Falling back to regular file upload`)
+                    // Set hasDirectories to false to trigger fallback handling below
+                    hasDirectories = false
+                } else {
+                    // No files available, show error
+                    setUploadError("Folder drag-and-drop is not supported in this browser. Please use the 'Folder Upload' button in the sidebar instead.")
+                    return
+                }
+            }
+            
+            // If no files were collected, fall back to regular file handling
+            if (allFiles.length === 0 && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                console.log(`[Drag & Drop] No files collected from directory entries, falling back to regular files`)
+                hasDirectories = false
             }
 
             if (allFiles.length > 0) {
+                console.log(`[Drag & Drop] Processing ${allFiles.length} files from folder structure`)
+                
                 // Create FileList from collected files
                 // DataTransfer API allows us to create a FileList programmatically
                 const dataTransfer = new DataTransfer()
-                allFiles.forEach(file => dataTransfer.items.add(file))
+                
+                // Create a map from filename to folder path for reliable lookup
+                const filenameToFolderPath = new Map<string, string>()
+                allFiles.forEach(file => {
+                    const folderPath = filePaths.get(file)
+                    if (folderPath) {
+                        filenameToFolderPath.set(file.name, folderPath)
+                        console.log(`[Drag & Drop] File: ${file.name} -> Folder: ${folderPath}`)
+                    }
+                    dataTransfer.items.add(file)
+                })
 
                 /**
                  * Creates a function that returns the folder path for each file.
+                 * Uses filename lookup since File objects from DataTransfer might be different instances.
                  * Preserves folder structure and prepends current folder if navigating within one.
                  */
                 const getFolderPath = (file: File): string | undefined => {
-                    const folderPath = filePaths.get(file)
+                    // Try to get folder path from filename lookup first (more reliable)
+                    let folderPath = filenameToFolderPath.get(file.name)
+                    
+                    // Fallback to direct File object lookup
+                    if (!folderPath) {
+                        folderPath = filePaths.get(file)
+                    }
+                    
                     if (folderPath) {
                         // If we're currently viewing a folder, prepend it to maintain structure
-                        return currentFolder ? `${currentFolder}/${folderPath}` : folderPath
+                        const finalPath = currentFolder ? `${currentFolder}/${folderPath}` : folderPath
+                        console.log(`[Drag & Drop] Resolved folder for ${file.name}: ${finalPath}`)
+                        return finalPath
                     }
+                    
+                    console.log(`[Drag & Drop] No folder path found for ${file.name}, using current folder: ${currentFolder || 'root'}`)
                     return currentFolder || undefined
                 }
 
+                console.log(`[Drag & Drop] Starting upload of ${allFiles.length} files`)
                 await onUpload(dataTransfer.files, getFolderPath)
+            } else {
+                console.warn('[Drag & Drop] No files found in dropped folder')
             }
-        } else if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        }
+        
+        // Fallback: Handle as regular files if folder detection failed or not supported
+        if (!hasDirectories && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
             // Regular file upload or files with webkitRelativePath (from webkitdirectory input)
             // This handles files dropped from folder input elements (not direct folder drag)
             const files = Array.from(e.dataTransfer.files)
+            console.log(`[Drag & Drop] Handling as regular files (${files.length} files)`)
 
-            // Check if any file has webkitRelativePath (indicates folder drag & drop from input element)
-            // webkitRelativePath is set when using <input type="file" webkitdirectory>
-            const hasFolderStructure = files.some(file => (file as any).webkitRelativePath)
+            // Check for ZIP files
+            const zipFiles = files.filter(file => {
+                const ext = file.name.split('.').pop()?.toLowerCase()
+                return ext === 'zip'
+            })
 
-            if (hasFolderStructure) {
-                /**
-                 * Extract folder path from each file's webkitRelativePath.
-                 * webkitRelativePath format: "folder/subfolder/filename.ext"
-                 */
-                const getFolderPath = (file: File): string | undefined => {
-                    const relativePath = (file as any).webkitRelativePath
+            if (zipFiles.length > 0) {
+                // Handle ZIP file uploads - backend will extract and create folder structure
+                await onUpload(e.dataTransfer.files, currentFolder || undefined)
+            } else {
+                // Check if any file has webkitRelativePath (indicates folder drag & drop from input element)
+                // webkitRelativePath is set when using <input type="file" webkitdirectory>
+                const hasFolderStructure = files.some(file => (file as any).webkitRelativePath)
 
-                    if (!relativePath) {
+                if (hasFolderStructure) {
+                    /**
+                     * Extract folder path from each file's webkitRelativePath.
+                     * webkitRelativePath format: "folder/subfolder/filename.ext"
+                     */
+                    const getFolderPath = (file: File): string | undefined => {
+                        const relativePath = (file as any).webkitRelativePath
+
+                        if (!relativePath) {
+                            return currentFolder || undefined
+                        }
+
+                        const pathParts = relativePath.split('/')
+
+                        if (pathParts.length > 1) {
+                            // Remove filename to get folder path
+                            let folderPath = pathParts.slice(0, -1).join('/')
+                            // Prepend current folder if navigating within one
+                            if (currentFolder) {
+                                folderPath = `${currentFolder}/${folderPath}`
+                            }
+                            return folderPath || undefined
+                        }
                         return currentFolder || undefined
                     }
 
-                    const pathParts = relativePath.split('/')
-
-                    if (pathParts.length > 1) {
-                        // Remove filename to get folder path
-                        let folderPath = pathParts.slice(0, -1).join('/')
-                        // Prepend current folder if navigating within one
-                        if (currentFolder) {
-                            folderPath = `${currentFolder}/${folderPath}`
-                        }
-                        return folderPath || undefined
-                    }
-                    return currentFolder || undefined
-                }
-
-                await onUpload(e.dataTransfer.files, getFolderPath)
-            } else {
-                // Regular file upload (no folder structure) - upload to current folder if in one
-                if (currentFolder) {
-                    await onUpload(e.dataTransfer.files, currentFolder)
+                    await onUpload(e.dataTransfer.files, getFolderPath)
                 } else {
-                    await onUpload(e.dataTransfer.files)
+                    // Regular file upload (no folder structure) - upload to current folder if in one
+                    if (currentFolder) {
+                        await onUpload(e.dataTransfer.files, currentFolder)
+                    } else {
+                        await onUpload(e.dataTransfer.files)
+                    }
                 }
             }
         }
@@ -496,11 +644,16 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                         <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-primary-600 transition-colors" />
                         <input
                             type="text"
-                            placeholder="Search documents..."
+                            placeholder={isSearching ? "Searching..." : "Search documents (AI-powered semantic search)..."}
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="w-full pl-12 pr-4 py-3 border-2 border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 bg-white hover:border-slate-300"
                         />
+                        {isSearching && (
+                            <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
+                                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-600"></div>
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -716,9 +869,19 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                                         <p className="mt-4 text-sm font-semibold text-slate-700 text-center line-clamp-2 px-2 break-words w-full min-w-0 max-w-full relative z-10">
                                             {folderName}
                                         </p>
-                                        <p className="mt-1.5 text-xs text-slate-500 font-medium relative z-10">
-                                            {folderDocCount} {folderDocCount === 1 ? 'item' : 'items'}
-                                        </p>
+                                        {isUploading && folderProgress.completedCount !== undefined && folderProgress.totalCount !== undefined ? (
+                                            <p className="mt-1.5 text-xs font-medium relative z-10">
+                                                <span className={cn(
+                                                    folderStatus === 'processing' ? 'text-orange-600' : 'text-red-600'
+                                                )}>
+                                                    {folderProgress.completedCount}/{folderProgress.totalCount} completed
+                                                </span>
+                                            </p>
+                                        ) : (
+                                            <p className="mt-1.5 text-xs text-slate-500 font-medium relative z-10">
+                                                {folderDocCount} {folderDocCount === 1 ? 'item' : 'items'}
+                                            </p>
+                                        )}
                                     </div>
 
                                     {/* Progress Bar */}
@@ -765,10 +928,13 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                                     key={doc.id}
                                     onMouseEnter={() => setHoveredId(doc.id)}
                                     onMouseLeave={() => setHoveredId(null)}
-                                    onClick={() => !isSelected && onSelect(doc)}
+                                    onClick={() => onSelect(doc)}
                                     className={cn(
                                         "relative group cursor-pointer rounded-xl border-2 transition-all duration-200",
-                                        isSelected ? "border-blue-500 bg-blue-50 shadow-md" : "border-slate-200 hover:border-blue-300 hover:shadow-lg",
+                                        isSelected ? "border-blue-500 bg-blue-50 shadow-md" : 
+                                        doc.status === 'processing' ? "border-orange-300 bg-orange-50 hover:border-orange-400 hover:shadow-lg" :
+                                        doc.status === 'uploading' ? "border-red-300 bg-red-50 hover:border-red-400 hover:shadow-lg" :
+                                        "border-slate-200 hover:border-blue-300 hover:shadow-lg",
                                         statusColor || fileTypeColor || "bg-white shadow-sm"
                                     )}
                                 >
@@ -806,7 +972,7 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                                         </div>
                                     </div>
 
-                                    {/* Progress Bar */}
+                                    {/* Progress Bar - Same as folders */}
                                     {isUploading && (
                                         <div className="px-3 pb-3">
                                             <ProgressBar
@@ -931,9 +1097,18 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                                                 {folderName}
                                             </p>
                                             <div className="flex items-center gap-2 mt-1">
-                                                <p className="text-xs text-slate-500">
-                                                    {folderDocCount} {folderDocCount === 1 ? 'item' : 'items'}
-                                                </p>
+                                                {isUploading && folderProgress.completedCount !== undefined && folderProgress.totalCount !== undefined ? (
+                                                    <p className={cn(
+                                                        "text-xs font-medium",
+                                                        folderStatus === 'processing' ? 'text-orange-600' : 'text-red-600'
+                                                    )}>
+                                                        {folderProgress.completedCount}/{folderProgress.totalCount} completed
+                                                    </p>
+                                                ) : (
+                                                    <p className="text-xs text-slate-500">
+                                                        {folderDocCount} {folderDocCount === 1 ? 'item' : 'items'}
+                                                    </p>
+                                                )}
                                                 {isUploading && (
                                                     <ProgressBar
                                                         status={folderProgress.status as 'uploading' | 'processing' | 'completed' | 'failed'}
@@ -994,7 +1169,7 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                                     key={doc.id}
                                     onMouseEnter={() => setHoveredId(doc.id)}
                                     onMouseLeave={() => setHoveredId(null)}
-                                    onClick={() => !isSelected && onSelect(doc)}
+                                    onClick={() => onSelect(doc)}
                                     className={cn(
                                         "grid grid-cols-12 gap-4 px-4 py-3 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors group",
                                         isSelected && "bg-blue-50",

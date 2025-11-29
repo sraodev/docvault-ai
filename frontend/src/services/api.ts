@@ -142,6 +142,7 @@ export const api = {
             const file = fileArray[0]
             const cleanFilename = extractFilename(file.name)
             const fileWithCleanName = new File([file], cleanFilename, { type: file.type })
+            const isZipFile = cleanFilename.toLowerCase().endsWith('.zip')
 
             formData.append('file', fileWithCleanName)
 
@@ -156,21 +157,44 @@ export const api = {
                 formData.append('folder', fileFolder)
             }
 
-            const response = await axios.post<Document>(`${API_URL}/upload`, formData, {
+            const response = await axios.post<Document | {
+                message: string
+                total_files: number
+                created: number
+                skipped: number
+                errors: number
+                documents: Document[]
+                skipped_files: Array<{ filename: string; reason: string }>
+                error_details: Array<{ filename: string; error: string }>
+            }>(`${API_URL}/upload`, formData, {
                 onUploadProgress: (progressEvent) => {
                     if (progressEvent.total && onProgress) {
                         const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total)
                         onProgress(cleanFilename, progress)
                     }
                 },
-                timeout: 300000 // 5 minutes timeout for large files
+                timeout: 600000 // 10 minutes timeout for ZIP files (which may contain many files)
             })
 
-            if (onProgress) {
-                onProgress(response.data.id, 100)
+            // Handle ZIP file response (returns multiple documents)
+            if (isZipFile && 'documents' in response.data) {
+                const zipResponse = response.data
+                // Update progress for all extracted documents
+                zipResponse.documents.forEach((doc) => {
+                    if (onProgress) {
+                        onProgress(doc.id, 100)
+                    }
+                })
+                return zipResponse.documents
             }
 
-            return [response.data]
+            // Handle regular file response (single document)
+            const doc = response.data as Document
+            if (onProgress) {
+                onProgress(doc.id, 100)
+            }
+
+            return [doc]
         } catch (error: any) {
             console.error("Error uploading files:", error)
             if (error.response?.status === 409 && error.response?.data?.error === 'duplicate_file') {
@@ -335,6 +359,113 @@ export const api = {
             console.error("Error response:", error.response?.data)
             console.error("Error status:", error.response?.status)
             const errorMsg = error.response?.data?.detail || error.response?.data?.message || error.message || "Failed to create folder."
+            throw new Error(errorMsg)
+        }
+    },
+
+    /**
+     * Get all unique AI tags across all documents.
+     * Returns tags with their usage counts.
+     * 
+     * @returns Object containing:
+     *   - tags: Array of unique tag strings (sorted by frequency, then alphabetically)
+     *   - tag_counts: Object mapping tag to count of documents using it
+     *   - total_tags: Total number of unique tags
+     */
+    getAllTags: async (): Promise<{ tags: string[]; tag_counts: Record<string, number>; total_tags: number }> => {
+        try {
+            const res = await axios.get(`${API_URL}/documents/tags`)
+            return res.data
+        } catch (error: any) {
+            console.error("Error fetching tags:", error)
+            const errorMsg = error.response?.data?.detail || error.message || "Failed to fetch tags."
+            throw new Error(errorMsg)
+        }
+    },
+
+    /**
+     * Get all documents that have a specific tag.
+     * Tag matching is case-insensitive.
+     * 
+     * @param tag - The tag to search for
+     * @returns Array of documents that contain this tag
+     */
+    getDocumentsByTag: async (tag: string): Promise<Document[]> => {
+        try {
+            const encodedTag = encodeURIComponent(tag)
+            const res = await axios.get(`${API_URL}/documents/tags/${encodedTag}`)
+            return res.data
+        } catch (error: any) {
+            console.error(`Error fetching documents by tag "${tag}":`, error)
+            const errorMsg = error.response?.data?.detail || error.message || "Failed to fetch documents by tag."
+            throw new Error(errorMsg)
+        }
+    },
+
+    /**
+     * Get extracted structured fields for a document.
+     * Returns fields like vendor, amount, date for invoices;
+     * name, skills, experience_years, email for resumes;
+     * parties_involved, start_date, end_date for contracts.
+     * 
+     * @param docId - The document ID
+     * @returns Object containing document_id and extracted_fields
+     */
+    getDocumentFields: async (docId: string): Promise<{ document_id: string; extracted_fields: Record<string, any> }> => {
+        try {
+            const res = await axios.get(`${API_URL}/documents/${docId}/fields`)
+            return res.data
+        } catch (error: any) {
+            console.error(`Error fetching extracted fields for document ${docId}:`, error)
+            const errorMsg = error.response?.data?.detail || error.message || "Failed to fetch extracted fields."
+            throw new Error(errorMsg)
+        }
+    },
+
+    /**
+     * AI-Based Semantic Search across all documents.
+     * Uses embeddings + cosine similarity to find relevant documents.
+     * 
+     * Supports natural language queries like:
+     * - "Find invoices above ₹50,000"
+     * - "Resume containing Python senior engineer"
+     * - "Contracts expiring this year"
+     * 
+     * @param query - Natural language search query
+     * @param limit - Maximum number of results (default: 10)
+     * @param minSimilarity - Minimum cosine similarity score 0.0-1.0 (default: 0.3)
+     * @returns Search results with similarity scores
+     */
+    semanticSearch: async (
+        query: string,
+        limit?: number,
+        minSimilarity?: number
+    ): Promise<{
+        query: string
+        semantic_query: string
+        filters_applied: Record<string, any>
+        total_results: number
+        returned_results: number
+        results: Array<{
+            document_id: string
+            filename: string
+            summary?: string
+            folder?: string
+            extracted_fields?: Record<string, any>
+            similarity_score: number
+            upload_date: string
+        }>
+    }> => {
+        try {
+            const params: Record<string, any> = { q: query }
+            if (limit !== undefined) params.limit = limit
+            if (minSimilarity !== undefined) params.min_similarity = minSimilarity
+            
+            const res = await axios.get(`${API_URL}/documents/search`, { params })
+            return res.data
+        } catch (error: any) {
+            console.error(`Error in semantic search for query "${query}":`, error)
+            const errorMsg = error.response?.data?.detail || error.message || "Failed to perform semantic search."
             throw new Error(errorMsg)
         }
     },

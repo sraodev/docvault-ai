@@ -32,34 +32,45 @@ export function UploadArea({ onUpload, isUploading, error }: UploadAreaProps) {
         if (e.dataTransfer.files?.length) {
             const files = Array.from(e.dataTransfer.files)
 
-            // Check if any file has webkitRelativePath (indicates folder drag & drop)
-            const hasFolderStructure = files.some(file => (file as any).webkitRelativePath)
+            // Check for ZIP files - backend will extract and create folder structure
+            const hasZipFiles = files.some(file => {
+                const ext = file.name.split('.').pop()?.toLowerCase()
+                return ext === 'zip'
+            })
 
-            if (hasFolderStructure) {
-                // Extract folder path from each file's webkitRelativePath
-                const getFolderPath = (file: File): string | undefined => {
-                    const relativePath = (file as any).webkitRelativePath
+            if (hasZipFiles) {
+                // Handle ZIP files - backend will extract and create folders
+                await onUpload(e.dataTransfer.files)
+            } else {
+                // Check if any file has webkitRelativePath (indicates folder drag & drop)
+                const hasFolderStructure = files.some(file => (file as any).webkitRelativePath)
 
-                    if (!relativePath) {
+                if (hasFolderStructure) {
+                    // Extract folder path from each file's webkitRelativePath
+                    const getFolderPath = (file: File): string | undefined => {
+                        const relativePath = (file as any).webkitRelativePath
+
+                        if (!relativePath) {
+                            return undefined
+                        }
+
+                        const pathParts = relativePath.split('/')
+
+                        if (pathParts.length > 1) {
+                            // Remove the filename to get the folder path
+                            const folderPath = pathParts.slice(0, -1).join('/')
+                            return folderPath || undefined
+                        }
+                        // File is in root of selected folder
                         return undefined
                     }
 
-                    const pathParts = relativePath.split('/')
-
-                    if (pathParts.length > 1) {
-                        // Remove the filename to get the folder path
-                        const folderPath = pathParts.slice(0, -1).join('/')
-                        return folderPath || undefined
-                    }
-                    // File is in root of selected folder
-                    return undefined
+                    // Upload files with folder structure preserved
+                    await onUpload(e.dataTransfer.files, getFolderPath)
+                } else {
+                    // Regular file upload (no folder structure)
+                    await onUpload(e.dataTransfer.files)
                 }
-
-                // Upload files with folder structure preserved
-                await onUpload(e.dataTransfer.files, getFolderPath)
-            } else {
-                // Regular file upload (no folder structure)
-                await onUpload(e.dataTransfer.files)
             }
         }
     }

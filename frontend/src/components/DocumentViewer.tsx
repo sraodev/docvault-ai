@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { FileText, File, Loader2, ChevronRight, Archive, Folder, X } from 'lucide-react'
+import { FileText, File, Loader2, ChevronRight, Archive, Folder, X, Trash2 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import { Document } from '../types'
@@ -14,9 +14,11 @@ interface DocumentViewerProps {
     document: Document | null
     onClose?: () => void
     onNavigateToFolder?: (folder: string | null) => void
+    onDeleteFolder?: (folderPath: string) => Promise<void>
+    documents?: Document[] // Optional: list of all documents for counting items in folder
 }
 
-export function DocumentViewer({ document, onClose, onNavigateToFolder }: DocumentViewerProps) {
+export function DocumentViewer({ document, onClose, onNavigateToFolder, onDeleteFolder, documents = [] }: DocumentViewerProps) {
     const [activeTab, setActiveTab] = useState<'original' | 'summary' | 'markdown' | 'tags'>('original')
     const [markdownContent, setMarkdownContent] = useState<string>('')
     const [isProcessing, setIsProcessing] = useState(false)
@@ -68,14 +70,22 @@ export function DocumentViewer({ document, onClose, onNavigateToFolder }: Docume
     const fetchMarkdown = async (doc: Document) => {
         if (!doc.markdown_path) return
         try {
-            const filename = extractFilename(doc.markdown_path)
-            if (!filename) return
+            // Extract filename from markdown_path (handles both absolute and relative paths)
+            let filename = extractFilename(doc.markdown_path)
+            if (!filename) {
+                // If extractFilename fails, try to get the last part of the path
+                filename = doc.markdown_path.split('/').pop() || doc.markdown_path.split('\\').pop() || ''
+            }
+            if (!filename) {
+                setMarkdownContent("Error: Could not determine markdown filename.")
+                return
+            }
 
             const content = await api.getFileContent(filename)
             setMarkdownContent(content)
         } catch (err) {
             console.error("Failed to fetch markdown", err)
-            setMarkdownContent("Error loading markdown.")
+            setMarkdownContent("Error loading markdown. The file may not have been generated yet.")
         }
     }
 
@@ -113,19 +123,57 @@ export function DocumentViewer({ document, onClose, onNavigateToFolder }: Docume
                             <span className="font-medium">My Vault</span>
                         </button>
                     )}
-                    {folderBreadcrumbs.map((folderPart, index) => {
+                    {folderBreadcrumbs.length > 0 && folderBreadcrumbs.map((folderPart, index) => {
                         const folderPath = folderBreadcrumbs.slice(0, index + 1).join('/')
                         return (
-                            <div key={folderPath} className="flex items-center gap-2">
+                            <div key={folderPath} className="flex items-center gap-2 group">
                                 <ChevronRight className="w-4 h-4 text-slate-400" />
                                 {onNavigateToFolder ? (
-                                    <button
-                                        onClick={() => onNavigateToFolder(folderPath)}
-                                        className="flex items-center gap-2 text-slate-600 hover:text-primary-600 transition-all duration-200 px-2 py-1 rounded-lg hover:bg-white/60"
-                                    >
-                                        {index === 0 && <Folder className="w-4 h-4" />}
-                                        <span className="truncate max-w-[200px] font-medium">{folderPart}</span>
-                                    </button>
+                                    <div className="flex items-center gap-1">
+                                        <button
+                                            onClick={() => onNavigateToFolder(folderPath)}
+                                            className="flex items-center gap-2 text-slate-600 hover:text-primary-600 transition-all duration-200 px-2 py-1 rounded-lg hover:bg-white/60"
+                                        >
+                                            {index === 0 && <Folder className="w-4 h-4" />}
+                                            <span className="truncate max-w-[200px] font-medium">{folderPart}</span>
+                                        </button>
+                                        {onDeleteFolder && (
+                                            <button
+                                                onClick={async (e) => {
+                                                    e.stopPropagation()
+                                                    try {
+                                                        // handleDeleteFolder already shows confirmation dialog
+                                                        await onDeleteFolder(folderPath)
+                                                        // Navigate to parent folder or root after deletion
+                                                        if (index > 0) {
+                                                            const parentPath = folderBreadcrumbs.slice(0, index).join('/')
+                                                            if (onNavigateToFolder) {
+                                                                onNavigateToFolder(parentPath)
+                                                            }
+                                                        } else {
+                                                            if (onNavigateToFolder) {
+                                                                onNavigateToFolder(null)
+                                                            }
+                                                        }
+                                                        // Close viewer if current document is in deleted folder
+                                                        if (currentDocument && (currentDocument.folder === folderPath || (currentDocument.folder && currentDocument.folder.startsWith(`${folderPath}/`)))) {
+                                                            if (onClose) {
+                                                                onClose()
+                                                            }
+                                                        }
+                                                    } catch (err: any) {
+                                                        // Error is already handled by handleDeleteFolder (shows alert)
+                                                        // Just log for debugging
+                                                        console.error("Delete folder failed in DocumentViewer", err)
+                                                    }
+                                                }}
+                                                className="p-1 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all shrink-0"
+                                                title="Delete folder"
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                        )}
+                                    </div>
                                 ) : (
                                     <span className="flex items-center gap-2 text-slate-500">
                                         {index === 0 && <Folder className="w-4 h-4" />}
@@ -135,7 +183,7 @@ export function DocumentViewer({ document, onClose, onNavigateToFolder }: Docume
                             </div>
                         )
                     })}
-                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                    {folderBreadcrumbs.length > 0 && <ChevronRight className="w-4 h-4 text-slate-400" />}
                     <span className="flex items-center gap-2 text-slate-900 font-semibold truncate max-w-[300px]">
                         <File className="w-4 h-4 shrink-0" />
                         <span className="truncate" title={currentDocument.filename}>{extractFilename(currentDocument.filename)}</span>

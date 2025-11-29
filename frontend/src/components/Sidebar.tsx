@@ -24,6 +24,7 @@ interface SidebarProps {
     onFolderChange?: (folder: string | null) => void
     onCreateFolder?: (folderName: string, parentFolder?: string | null) => Promise<void>
     onDeleteFolder?: (folderPath: string) => Promise<void>
+    onNavigateHome?: () => void
 }
 
 export function Sidebar({
@@ -39,7 +40,8 @@ export function Sidebar({
     currentFolder,
     onFolderChange,
     onCreateFolder,
-    onDeleteFolder
+    onDeleteFolder,
+    onNavigateHome
 }: SidebarProps) {
     const fileInputRef = useRef<HTMLInputElement>(null)
     const folderInputRef = useRef<HTMLInputElement>(null)
@@ -235,6 +237,16 @@ export function Sidebar({
         ).length
     }
 
+    // Helper function to check if a folder node has any content (files or subfolders with content)
+    const hasContent = (node: { files: Document[]; subfolders: Map<string, any> }): boolean => {
+        if (node.files.length > 0) return true
+        // Check if any subfolder has content
+        for (const subfolder of node.subfolders.values()) {
+            if (hasContent(subfolder)) return true
+        }
+        return false
+    }
+
     const renderFolderNode = (node: { name: string; fullPath: string; files: Document[]; subfolders: Map<string, any> }, level: number = 0): JSX.Element | null => {
         const isExpanded = expandedFolders.has(node.fullPath)
         const isActive = currentFolder === node.fullPath || (node.fullPath === '' && currentFolder === null)
@@ -244,12 +256,18 @@ export function Sidebar({
             return null
         }
 
+        // Skip rendering empty folders (folders with no files and no subfolders with content)
+        if (node.fullPath !== '' && !hasContent(node)) {
+            return null
+        }
+
         // Only render non-root folders
         if (node.fullPath === '') {
-            // For root, render subfolders directly
+            // For root, render subfolders directly (only those with content)
             return (
                 <>
                     {Array.from(node.subfolders.values())
+                        .filter(subfolder => hasContent(subfolder))
                         .sort((a, b) => a.name.localeCompare(b.name))
                         .map(subfolder => renderFolderNode(subfolder, level))}
                 </>
@@ -291,9 +309,18 @@ export function Sidebar({
                         <Folder className={cn("w-4 h-4 shrink-0 transition-transform group-hover:scale-110", isActive ? "text-primary-600" : "text-slate-500")} />
                     )}
                     <span className={cn(
-                        "text-sm font-medium flex-1 truncate transition-colors",
-                        isActive ? "text-primary-700" : "text-slate-600 group-hover:text-slate-900",
-                        isActive && "font-semibold"
+                        "flex-1 truncate transition-colors",
+                        // Smart Folders styling
+                        node.fullPath.startsWith("Smart Folders") ? (
+                            isActive 
+                                ? "text-sm font-semibold text-primary-700" 
+                                : "text-sm font-semibold text-indigo-600 group-hover:text-indigo-700"
+                        ) : (
+                            // Regular folders styling
+                            isActive 
+                                ? "text-sm font-medium text-primary-700 font-semibold" 
+                                : "text-sm font-medium text-slate-600 group-hover:text-slate-900"
+                        )
                     )} title={node.name}>
                         {node.name}
                     </span>
@@ -400,8 +427,9 @@ export function Sidebar({
                             )
                         })}
 
-                        {/* Render subfolders */}
+                        {/* Render subfolders (only those with content) */}
                         {Array.from(node.subfolders.values())
+                            .filter(subfolder => hasContent(subfolder))
                             .sort((a, b) => a.name.localeCompare(b.name))
                             .map(subfolder => renderFolderNode(subfolder, level + 1))}
                     </div>
@@ -425,10 +453,17 @@ export function Sidebar({
         <div className="w-64 bg-white/95 backdrop-blur-sm border-r border-slate-200/80 flex flex-col shadow-lg">
 
             <div className="h-[76px] px-6 border-b border-slate-200/80 bg-white flex items-center">
-                <h1 className="text-xl font-bold flex items-center gap-3 animate-fade-in">
+                <button
+                    onClick={() => {
+                        if (onNavigateHome) {
+                            onNavigateHome()
+                        }
+                    }}
+                    className="text-xl font-bold flex items-center gap-3 animate-fade-in hover:opacity-80 transition-opacity cursor-pointer"
+                >
                     <FileText className="w-7 h-7 text-primary-600" />
                     <span className="bg-gradient-to-r from-primary-600 to-indigo-600 bg-clip-text text-transparent">DocVaultAI</span>
-                </h1>
+                </button>
             </div>
 
             {/* + New Button with Dropdown */}
@@ -600,8 +635,9 @@ export function Sidebar({
                                     )
                                 })}
 
-                                {/* Render root-level folders */}
+                                {/* Render root-level folders (only those with content) */}
                                 {Array.from(folderTree.subfolders.values())
+                                    .filter(subfolder => hasContent(subfolder))
                                     .sort((a, b) => a.name.localeCompare(b.name))
                                     .map(subfolder => renderFolderNode(subfolder, 0))}
 
