@@ -12,6 +12,7 @@ function cn(...inputs: (string | undefined | null | false)[]) {
 
 interface SidebarProps {
     documents: Document[]
+    folders?: string[]
     selectedDocId?: string
     onSelect: (doc: Document) => void
     onDelete: (id: string) => void
@@ -27,6 +28,7 @@ interface SidebarProps {
 
 export function Sidebar({
     documents,
+    folders = [],
     selectedDocId,
     onSelect,
     onDelete,
@@ -45,6 +47,7 @@ export function Sidebar({
     const [showNewFolderInput, setShowNewFolderInput] = useState(false)
     const [showNewMenu, setShowNewMenu] = useState(false)
     const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(['root']))
+    const [contextMenu, setContextMenu] = useState<{ x: number; y: number; folderPath: string } | null>(null)
 
     const handleNewFolder = () => {
         setShowNewMenu(false)
@@ -147,7 +150,29 @@ export function Sidebar({
             subfolders: new Map()
         }
 
-        // Build folder structure from documents
+        // First, build folder structure from folders list (includes empty folders)
+        // This ensures empty folders appear in the tree
+        folders.forEach(folderPath => {
+            if (!folderPath) return
+            
+            const parts = folderPath.split('/').filter(p => p.trim() !== '')
+            let current = root
+
+            parts.forEach((part, index) => {
+                if (!current.subfolders.has(part)) {
+                    const fullPath = parts.slice(0, index + 1).join('/')
+                    current.subfolders.set(part, {
+                        name: part,
+                        fullPath,
+                        files: [],
+                        subfolders: new Map()
+                    })
+                }
+                current = current.subfolders.get(part)!
+            })
+        })
+
+        // Then, add documents to the folder structure
         documents.forEach(doc => {
             if (!doc.folder) {
                 root.files.push(doc)
@@ -174,7 +199,7 @@ export function Sidebar({
         })
 
         return root
-    }, [documents])
+    }, [documents, folders])
 
     const toggleFolder = (folderPath: string) => {
         const newExpanded = new Set(expandedFolders)
@@ -200,6 +225,14 @@ export function Sidebar({
         if (onFolderChange) {
             onFolderChange(folderPath)
         }
+    }
+
+    // Helper function to count all documents recursively in a folder
+    const countDocumentsInFolder = (folderPath: string): number => {
+        return documents.filter(doc =>
+            doc.folder === folderPath ||
+            (doc.folder && doc.folder.startsWith(`${folderPath}/`))
+        ).length
     }
 
     const renderFolderNode = (node: { name: string; fullPath: string; files: Document[]; subfolders: Map<string, any> }, level: number = 0): JSX.Element | null => {
@@ -237,6 +270,11 @@ export function Sidebar({
                         toggleFolder(node.fullPath)
                         handleFolderClick(node.fullPath)
                     }}
+                    onContextMenu={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setContextMenu({ x: e.clientX, y: e.clientY, folderPath: node.fullPath })
+                    }}
                 >
                     {node.subfolders.size > 0 ? (
                         isExpanded ? (
@@ -267,31 +305,52 @@ export function Sidebar({
                             {node.files.length + Array.from(node.subfolders.values()).reduce((sum, sub) => sum + sub.files.length, 0)}
                         </span>
                     )}
-                    {onDeleteFolder && (
-                        <button
-                            onClick={async (e) => {
-                                e.stopPropagation()
-                                const count = node.files.length + Array.from(node.subfolders.values()).reduce((sum, sub) => sum + sub.files.length + (sub.subfolders.size > 0 ? 1 : 0), 0)
-                                if (window.confirm(`Are you sure you want to delete this folder?\n\nThis will delete ${count} ${count === 1 ? 'item' : 'items'} including all files and subfolders.`)) {
-                                    try {
-                                        if (onDeleteFolder) {
-                                            await onDeleteFolder(node.fullPath)
-                                        } else {
-                                            await api.deleteFolder(node.fullPath)
+                    <div className="flex items-center gap-1 shrink-0">
+                        {onCreateFolder && (
+                            <button
+                                onClick={async (e) => {
+                                    e.stopPropagation()
+                                    const folderName = prompt(`Enter name for new folder in "${node.name}":`)
+                                    if (folderName && folderName.trim()) {
+                                        try {
+                                            await onCreateFolder(folderName.trim(), node.fullPath)
+                                        } catch (err: any) {
+                                            console.error("Failed to create subfolder:", err)
                                         }
-                                    } catch (err: any) {
-                                        console.error("Delete folder failed", err)
-                                        const errorMsg = err.response?.data?.detail || err.message || "Failed to delete folder"
-                                        alert(errorMsg)
                                     }
-                                }
-                            }}
-                            className="p-1 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all shrink-0"
-                            title="Delete folder"
-                        >
-                            <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                    )}
+                                }}
+                                className="p-1 rounded-md text-slate-400 hover:text-primary-600 hover:bg-primary-50 opacity-0 group-hover:opacity-100 transition-all"
+                                title="Create subfolder"
+                            >
+                                <FolderPlus className="w-3.5 h-3.5" />
+                            </button>
+                        )}
+                        {onDeleteFolder && (
+                            <button
+                                onClick={async (e) => {
+                                    e.stopPropagation()
+                                    const count = countDocumentsInFolder(node.fullPath)
+                                    if (window.confirm(`Are you sure you want to delete "${node.name}"?\n\nThis will delete ${count} ${count === 1 ? 'item' : 'items'} including all files and subfolders.`)) {
+                                        try {
+                                            if (onDeleteFolder) {
+                                                await onDeleteFolder(node.fullPath)
+                                            } else {
+                                                await api.deleteFolder(node.fullPath)
+                                            }
+                                        } catch (err: any) {
+                                            console.error("Delete folder failed", err)
+                                            const errorMsg = err.response?.data?.detail || err.message || "Failed to delete folder"
+                                            alert(errorMsg)
+                                        }
+                                    }
+                                }}
+                                className="p-1 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
+                                title="Delete folder"
+                            >
+                                <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 {/* Render files and subfolders when expanded */}
@@ -557,6 +616,57 @@ export function Sidebar({
                     </div>
                 </nav>
             </div>
+
+            {/* Context Menu */}
+            {contextMenu && (
+                <div
+                    className="fixed bg-white border border-slate-200 rounded-lg shadow-xl z-50 py-1 min-w-[180px]"
+                    style={{ left: contextMenu.x, top: contextMenu.y }}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    {onCreateFolder && (
+                        <button
+                            onClick={async () => {
+                                const folderName = prompt(`Enter name for new folder:`)
+                                if (folderName && folderName.trim()) {
+                                    try {
+                                        await onCreateFolder(folderName.trim(), contextMenu.folderPath)
+                                    } catch (err: any) {
+                                        console.error("Failed to create folder:", err)
+                                    }
+                                }
+                                setContextMenu(null)
+                            }}
+                            className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                        >
+                            <FolderPlus className="w-4 h-4" />
+                            New Folder
+                        </button>
+                    )}
+                    {onDeleteFolder && (
+                        <>
+                            <div className="border-t border-slate-200 my-1"></div>
+                            <button
+                                onClick={async () => {
+                                    const count = countDocumentsInFolder(contextMenu.folderPath)
+                                    if (window.confirm(`Are you sure you want to delete this folder?\n\nThis will delete ${count} ${count === 1 ? 'item' : 'items'} including all files and subfolders.`)) {
+                                        try {
+                                            await onDeleteFolder(contextMenu.folderPath)
+                                        } catch (err: any) {
+                                            console.error("Delete folder failed", err)
+                                        }
+                                    }
+                                    setContextMenu(null)
+                                }}
+                                className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                                Delete Folder
+                            </button>
+                        </>
+                    )}
+                </div>
+            )}
 
             {/* Hidden Inputs */}
             <input

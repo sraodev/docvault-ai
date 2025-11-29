@@ -7,6 +7,7 @@ import { useDocuments } from './hooks/useDocuments'
 function App() {
   const {
     documents,
+    folders,
     selectedDoc,
     setSelectedDoc,
     isUploading,
@@ -35,6 +36,7 @@ function App() {
     <div className="flex h-screen bg-white font-sans text-slate-900">
       <Sidebar
         documents={documents}
+        folders={folders}
         selectedDocId={selectedDoc?.id}
         onSelect={handleSelect}
         onDelete={handleDelete}

@@ -5,6 +5,7 @@ import { calculateFileChecksum } from '../utils/checksum'
 
 export function useDocuments() {
     const [documents, setDocuments] = useState<Document[]>([])
+    const [folders, setFolders] = useState<string[]>([])
     const [selectedDoc, setSelectedDoc] = useState<Document | null>(null)
     const [isUploading, setIsUploading] = useState(false)
     const [uploadError, setUploadError] = useState<string | null>(null)
@@ -14,8 +15,9 @@ export function useDocuments() {
     const fetchDocuments = useCallback(async () => {
         try {
             const docs = await api.getDocuments()
-            // Also fetch folders list to ensure empty folders are included
-            await api.getFolders()
+            // Fetch folders list to ensure empty folders are included
+            const foldersResponse = await api.getFolders()
+            setFolders(foldersResponse.folders || [])
 
             // Merge with existing documents to preserve upload progress
             setDocuments(prevDocs => {
@@ -248,8 +250,8 @@ export function useDocuments() {
 
     /**
      * Creates a new folder. Since folders are virtual (metadata only),
-     * this validates the folder name. The folder will appear in the tree
-     * once files are uploaded to it.
+     * this validates the folder name and stores it in the database.
+     * The folder will appear in the tree immediately after creation.
      * 
      * @param folderName - Name of the folder to create
      * @param parentFolder - Optional parent folder path (for nested folders)
@@ -257,8 +259,7 @@ export function useDocuments() {
     const handleCreateFolder = async (folderName: string, parentFolder?: string | null) => {
         try {
             const result = await api.createFolder(folderName, parentFolder)
-            // Refresh documents to ensure consistency
-            // Note: Folder won't appear in tree until files are uploaded to it
+            // Refresh documents and folders to ensure consistency
             await fetchDocuments()
             // Show success message
             alert(`Folder "${result.folder_path}" created successfully!`)
@@ -272,6 +273,7 @@ export function useDocuments() {
 
     return {
         documents,
+        folders,
         selectedDoc,
         setSelectedDoc,
         isUploading,
