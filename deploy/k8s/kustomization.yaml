@@ -1,0 +1,30 @@
+# Kustomization file for easy deployment management
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: docvault
+
+resources:
+  - configmap.yaml
+  - persistent-volumes.yaml
+  - backend/deployment.yaml
+  - backend/service.yaml
+  - frontend/deployment.yaml
+  - frontend/service.yaml
+  - ingress.yaml
+  - hpa.yaml
+
+# Common labels
+commonLabels:
+  app: docvault
+  managed-by: kustomize
+
+# Image configuration (override in production)
+images:
+  - name: docvault-backend
+    newName: your-registry/docvault-backend
+    newTag: latest
+  - name: docvault-frontend
+    newName: your-registry/docvault-frontend
+    newTag: latest
+

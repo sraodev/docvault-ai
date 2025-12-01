@@ -1,0 +1,28 @@
+# Database optimization for million+ documents
+# This ConfigMap contains database tuning parameters
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: database-optimization
+  namespace: docvault
+data:
+  # Scalable JSON database settings
+  shard_size: "1000"  # Documents per shard
+  cache_size: "10000"  # Increased cache for high load
+  wal_flush_interval: "50"  # More frequent WAL flushes
+  compaction_threshold: "5000"  # More frequent compaction
+  
+  # Connection pooling
+  max_connections: "200"
+  connection_timeout: "30"
+  pool_size: "50"
+  
+  # Query optimization
+  enable_indexes: "true"
+  index_cache_size: "5000"
+  
+  # Background tasks
+  background_compaction: "true"
+  compaction_interval: "3600"  # 1 hour
+

@@ -1,0 +1,174 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: docvault-backend
+  namespace: docvault
+  labels:
+    app: docvault-backend
+    version: v1
+spec:
+  replicas: 5  # Start with 5 replicas for million+ users
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: docvault-backend
+  template:
+    metadata:
+      labels:
+        app: docvault-backend
+        version: v1
+    spec:
+      containers:
+      - name: backend
+        image: docvault-backend:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        env:
+        - name: DATABASE_TYPE
+          valueFrom:
+            configMapKeyRef:
+              name: docvault-config
+              key: database_type
+        - name: STORAGE_TYPE
+          valueFrom:
+            configMapKeyRef:
+              name: docvault-config
+              key: storage_type
+        - name: JSON_DB_PATH
+          valueFrom:
+            configMapKeyRef:
+              name: docvault-backend-config
+              key: JSON_DB_PATH
+        - name: UPLOAD_DIR
+          valueFrom:
+            configMapKeyRef:
+              name: docvault-backend-config
+              key: UPLOAD_DIR
+        - name: DB_DIR
+          valueFrom:
+            configMapKeyRef:
+              name: docvault-backend-config
+              key: DB_DIR
+        - name: ENVIRONMENT
+          value: "production"
+        # Redis/Cache
+        - name: REDIS_URL
+          valueFrom:
+            configMapKeyRef:
+              name: docvault-config
+              key: redis_url
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: docvault-config
+              key: redis_host
+        - name: REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: docvault-config
+              key: redis_port
+        # Celery
+        - name: CELERY_BROKER_URL
+          valueFrom:
+            configMapKeyRef:
+              name: docvault-config
+              key: celery_broker_url
+        - name: CELERY_RESULT_BACKEND
+          valueFrom:
+            configMapKeyRef:
+              name: docvault-config
+              key: celery_result_backend
+        # Performance
+        - name: MAX_WORKERS
+          valueFrom:
+            configMapKeyRef:
+              name: docvault-config
+              key: max_workers
+        - name: WORKER_CONNECTIONS
+          valueFrom:
+            configMapKeyRef:
+              name: docvault-config
+              key: worker_connections
+        - name: OPENROUTER_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: docvault-secrets
+              key: openrouter_api_key
+        - name: ANTHROPIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: docvault-secrets
+              key: anthropic_api_key
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: docvault-secrets
+              key: aws_access_key_id
+              optional: true
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: docvault-secrets
+              key: aws_secret_access_key
+              optional: true
+        - name: S3_BUCKET_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: docvault-config
+              key: s3_bucket_name
+              optional: true
+        resources:
+          requests:
+            memory: "2Gi"  # Increased for high load
+            cpu: "2000m"  # Increased CPU
+          limits:
+            memory: "4Gi"  # Increased limit
+            cpu: "4000m"  # Increased CPU limit
+        volumeMounts:
+        - name: uploads-storage
+          mountPath: /app/uploads
+        - name: data-storage
+          mountPath: /app/data
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 40
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 0
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 12
+      volumes:
+      - name: uploads-storage
+        persistentVolumeClaim:
+          claimName: docvault-uploads-pvc
+      - name: data-storage
+        persistentVolumeClaim:
+          claimName: docvault-data-pvc
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+

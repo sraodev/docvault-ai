@@ -63,11 +63,27 @@ DocVault AI uses a **Repository Pattern** with **Strategy Pattern** to provide p
 
 ## Available Databases
 
-### JSON Adapter (Recommended for Demos)
-- **Type**: File-based JSON storage
+### Scalable JSON Adapter (Recommended for Production)
+- **Type**: Shard-based JSON storage
+- **Persistence**: Yes (data survives restarts)
+- **Storage**: `data/json_db/` with shard-based structure
+- **Capacity**: 500,000+ documents efficiently
+- **Features**:
+  - Shard-based storage (1,000 documents per shard)
+  - Global index for O(1) lookups
+  - Write-ahead logging (WAL) for durability
+  - Atomic locking (cross-platform)
+  - LRU cache (5,000 items)
+  - Background compaction
+- **Best for**: Production deployments, high-volume applications
+- **Setup**: Zero configuration needed
+
+### Legacy JSON Adapter (Development Only)
+- **Type**: Single-file JSON storage
 - **Persistence**: Yes (data survives restarts)
 - **Storage**: `data/json_db/documents.json` and `folders.json`
 - **Best for**: Local demos, development, easy debugging
+- **Limitation**: Not suitable for production (single file bottleneck)
 - **Setup**: Zero configuration needed
 
 ### Memory Adapter (Testing)
@@ -116,6 +132,83 @@ class JSONAdapter(DatabaseInterface):
 ✅ **Testable** - Mock DatabaseInterface for unit tests  
 ✅ **Demo Ready** - JSON for demos, Memory for testing  
 ✅ **SOLID Principles** - Follows best practices  
+
+## Scalable JSON Database Details
+
+### Architecture
+
+The Scalable JSON adapter uses a **shard-based architecture** to handle hundreds of thousands of documents efficiently:
+
+```
+/data/json_db/
+├── index.json              # Global index (O(1) lookups)
+├── db.lock                 # Lock file (prevents corruption)
+├── documents/              # Shard-based document storage
+│   ├── 0-999/
+│   │   ├── doc_1.json
+│   │   ├── doc_2.json
+│   │   └── ...
+│   ├── 1000-1999/
+│   │   └── ...
+│   └── ...
+└── folders/                # Folder metadata
+    └── folder_name.json
+```
+
+### Key Features
+
+1. **Shard-Based Storage**: Documents stored in 1,000-document shards
+   - Prevents single-file bottlenecks
+   - Enables parallel writes to different shards
+   - Scales to 500,000+ documents
+
+2. **Global Index**: O(1) lookups via `index.json`
+   - Fast document retrieval
+   - Constant-time operations
+   - Efficient folder queries
+
+3. **Write-Ahead Logging (WAL)**: Durability and crash recovery
+   - All writes logged before commit
+   - Automatic recovery on restart
+   - Audit trail for debugging
+
+4. **Atomic Locking**: Cross-platform file locking
+   - Prevents corruption from concurrent writes
+   - Unix (fcntl) and Windows (msvcrt) support
+   - PID-based lock tracking
+
+5. **LRU Cache**: 5,000-item cache for performance
+   - Reduces disk I/O
+   - Fast repeated lookups
+   - Automatic eviction
+
+6. **Background Compaction**: Automatic cleanup
+   - Runs every 10,000 writes
+   - Removes deleted documents
+   - Optimizes storage
+
+### Performance Characteristics
+
+- **Read**: O(1) via index lookup + cache hit
+- **Write**: O(1) index update + O(1) shard write + WAL append
+- **Search**: O(n) for full-text, O(n) for semantic (with embedding pre-computation)
+- **Scalability**: Handles 500,000+ documents efficiently
+
+### Usage
+
+```python
+# Set environment variable
+export DATABASE_TYPE=scalable_json
+export JSON_DB_PATH=/path/to/data/json_db
+
+# Or in code
+from app.services.database import DatabaseFactory
+
+db_service = await DatabaseFactory.create_and_initialize(
+    "scalable_json",
+    data_dir=Path("/path/to/data/json_db")
+)
+```
 
 ## Adding a New Database
 

@@ -2,15 +2,22 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+# Load environment variables (only in development)
+# In containers, environment variables are set directly
+if os.getenv("ENVIRONMENT") != "production":
+    load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-UPLOAD_DIR = BASE_DIR / "uploads"
-UPLOAD_DIR.mkdir(exist_ok=True)
+
+# Upload directory - can be overridden by environment variable
+UPLOAD_DIR_STR = os.getenv("UPLOAD_DIR", str(BASE_DIR / "uploads"))
+UPLOAD_DIR = Path(UPLOAD_DIR_STR)
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 # Database path for persistent storage
-DB_DIR = BASE_DIR / "data"
-DB_DIR.mkdir(exist_ok=True)
+DB_DIR_STR = os.getenv("DB_DIR", str(BASE_DIR / "data"))
+DB_DIR = Path(DB_DIR_STR)
+DB_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DB_DIR / "docvault.db"
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
@@ -41,3 +48,29 @@ S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL")  # For S3-compatible services (Mi
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 SUPABASE_STORAGE_BUCKET = os.getenv("SUPABASE_STORAGE_BUCKET", "files")
+
+# Redis/Cache configuration (for million+ user scale)
+REDIS_URL = os.getenv("REDIS_URL")  # Full Redis URL (redis://host:port)
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
+REDIS_DB = int(os.getenv("REDIS_DB", "0"))
+REDIS_CLUSTER_MODE = os.getenv("REDIS_CLUSTER_MODE", "false").lower() == "true"
+
+# Message Queue configuration (Celery)
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/1")
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/2")
+
+# Rate Limiting
+RATE_LIMIT_ENABLED = os.getenv("RATE_LIMIT_ENABLED", "true").lower() == "true"
+RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "100"))
+RATE_LIMIT_PER_HOUR = int(os.getenv("RATE_LIMIT_PER_HOUR", "1000"))
+
+# Performance tuning
+MAX_WORKERS = int(os.getenv("MAX_WORKERS", "4"))
+WORKER_CONNECTIONS = int(os.getenv("WORKER_CONNECTIONS", "1000"))
+KEEP_ALIVE_TIMEOUT = int(os.getenv("KEEP_ALIVE_TIMEOUT", "65"))
+
+# CDN Configuration
+CDN_URL = os.getenv("CDN_URL")  # CDN URL for static assets
+CDN_ENABLED = os.getenv("CDN_ENABLED", "false").lower() == "true"

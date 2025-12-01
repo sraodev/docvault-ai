@@ -1,68 +1,68 @@
 {
   "last_id": 0,
   "documents": {
-    "66330e0f-cd08-489e-86e9-c9b7f2781cb2": {
+    "566d0af6-5ccf-4d2b-909e-fbff774d5d1b": {
       "filename": "Sandisk NDA.pdf",
       "folder": null,
-      "shard": "85000-85999",
-      "path": "documents/85000-85999/66330e0f-cd08-489e-86e9-c9b7f2781cb2.json",
-      "updated": "2025-11-29T14:46:08.950937"
+      "shard": "41000-41999",
+      "path": "documents/41000-41999/566d0af6-5ccf-4d2b-909e-fbff774d5d1b.json",
+      "updated": "2025-12-01T14:02:00.195512"
     },
-    "910b00bc-baae-438c-9f58-2665953ac48a": {
-      "filename": ".DS_Store",
-      "folder": "OutMark/Sri",
-      "shard": "95000-95999",
-      "path": "documents/95000-95999/910b00bc-baae-438c-9f58-2665953ac48a.json",
-      "updated": "2025-11-29T14:47:05.378306"
-    },
-    "500612e7-3971-47b9-b876-ec42098d6c18": {
-      "filename": ".DS_Store",
-      "folder": "OutMark/Sri",
-      "shard": "48000-48999",
-      "path": "documents/48000-48999/500612e7-3971-47b9-b876-ec42098d6c18.json",
-      "updated": "2025-11-29T14:47:16.639936"
-    },
-    "10d228ed-6c65-422f-8f69-c938feccc320": {
+    "7ae20d2b-e5bc-4415-b9ee-e2f2ea1800ed": {
       "filename": "TreeListRecursion.pdf",
       "folder": "OutMark/Code",
-      "shard": "48000-48999",
-      "path": "documents/48000-48999/10d228ed-6c65-422f-8f69-c938feccc320.json",
-      "updated": "2025-11-29T14:47:35.020270"
+      "shard": "9000-9999",
+      "path": "documents/9000-9999/7ae20d2b-e5bc-4415-b9ee-e2f2ea1800ed.json",
+      "updated": "2025-12-01T14:04:53.888877"
     },
-    "0337421c-f8c9-45ce-940d-78b552ae3dbf": {
+    "1bf2fe29-7f85-47c0-b9f7-645aac147415": {
+      "filename": ".DS_Store",
+      "folder": "OutMark/Sri",
+      "shard": "98000-98999",
+      "path": "documents/98000-98999/1bf2fe29-7f85-47c0-b9f7-645aac147415.json",
+      "updated": "2025-12-01T14:04:36.475877"
+    },
+    "1a4cb7bf-8c6e-4f42-978c-43805439f7a4": {
+      "filename": ".DS_Store",
+      "folder": "OutMark/Sri",
+      "shard": "13000-13999",
+      "path": "documents/13000-13999/1a4cb7bf-8c6e-4f42-978c-43805439f7a4.json",
+      "updated": "2025-12-01T14:04:30.337155"
+    },
+    "86e827c6-ab6f-4eb2-afb1-02662ada0a56": {
+      "filename": ".DS_Store",
+      "folder": "OutMark/Sri",
+      "shard": "83000-83999",
+      "path": "documents/83000-83999/86e827c6-ab6f-4eb2-afb1-02662ada0a56.json",
+      "updated": "2025-12-01T14:05:11.289075"
+    },
+    "c3b55fc7-12d9-4d8f-bfea-0eeec22da73b": {
       "filename": "INV-KA-B1-154034981-102013581065-NOVEMBER-2025.pdf",
       "folder": "OutMark/Sri",
-      "shard": "0-999",
-      "path": "documents/0-999/0337421c-f8c9-45ce-940d-78b552ae3dbf.json",
-      "updated": "2025-11-29T14:47:49.434217"
+      "shard": "9000-9999",
+      "path": "documents/9000-9999/c3b55fc7-12d9-4d8f-bfea-0eeec22da73b.json",
+      "updated": "2025-12-01T14:05:05.927720"
     },
-    "a97dcce0-e69b-4b11-b0b1-6e4db571629b": {
+    "0213f73b-4013-4a47-9b28-28dcf964075e": {
       "filename": "AI Document Vault - Case Study.pdf",
       "folder": "OutMark/DocX",
-      "shard": "86000-86999",
-      "path": "documents/86000-86999/a97dcce0-e69b-4b11-b0b1-6e4db571629b.json",
-      "updated": "2025-11-29T14:47:58.840233"
+      "shard": "19000-19999",
+      "path": "documents/19000-19999/0213f73b-4013-4a47-9b28-28dcf964075e.json",
+      "updated": "2025-12-01T14:05:58.253956"
     },
-    "3e31725e-7bea-4671-82fe-b1bb1ae2c0f8": {
-      "filename": "Resume_Srinivas_Rao_PrincipalEngineer.pdf",
-      "folder": "OutMark/Sri/Resume",
-      "shard": "54000-54999",
-      "path": "documents/54000-54999/3e31725e-7bea-4671-82fe-b1bb1ae2c0f8.json",
-      "updated": "2025-11-29T14:48:15.818084"
-    },
-    "7e2d1edd-4dd6-46fa-a1bc-62ba66fea6fd": {
+    "501d1c3e-6654-42d3-af30-ad39526e3459": {
       "filename": "EssentialC.pdf",
       "folder": "OutMark/Sri",
-      "shard": "89000-89999",
-      "path": "documents/89000-89999/7e2d1edd-4dd6-46fa-a1bc-62ba66fea6fd.json",
-      "updated": "2025-11-29T14:48:36.004246"
+      "shard": "39000-39999",
+      "path": "documents/39000-39999/501d1c3e-6654-42d3-af30-ad39526e3459.json",
+      "updated": "2025-12-01T14:05:48.254147"
     },
-    "5f12b5bc-8b9d-4ff3-9d38-56c82e908cee": {
-      "filename": ".DS_Store",
-      "folder": "OutMark/OutMark/Sri",
-      "shard": "25000-25999",
-      "path": "documents/25000-25999/5f12b5bc-8b9d-4ff3-9d38-56c82e908cee.json",
-      "updated": "2025-11-29T14:48:47.349803"
+    "94f012a7-1b53-4f69-aa64-24415ab34181": {
+      "filename": "Resume_Srinivas_Rao_PrincipalEngineer.pdf",
+      "folder": "OutMark/Sri/Resume",
+      "shard": "84000-84999",
+      "path": "documents/84000-84999/94f012a7-1b53-4f69-aa64-24415ab34181.json",
+      "updated": "2025-12-01T14:05:28.009627"
     }
   }
 }
