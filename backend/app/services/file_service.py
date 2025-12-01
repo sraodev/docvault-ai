@@ -9,6 +9,23 @@ from pypdf import PdfReader
 import zipfile
 import io
 from typing import List, Tuple, Optional
+
+# Import DOCX support (optional - will fail gracefully if not installed)
+try:
+    from docx import Document as DocxDocument
+    DOCX_AVAILABLE = True
+except ImportError:
+    DOCX_AVAILABLE = False
+    print("⚠️  python-docx not installed. DOCX files will be stored but text extraction will fail.")
+
+# Import DOC support (optional - requires textract library)
+try:
+    import textract
+    DOC_AVAILABLE = True
+except ImportError:
+    DOC_AVAILABLE = False
+    print("⚠️  textract not installed. DOC files will be stored but text extraction will fail. "
+          "Install with: pip install textract (requires antiword or LibreOffice)")
 from .interfaces import IFileService
 from .storage import FileStorageFactory, FileStorageInterface
 from ..core.config import STORAGE_TYPE, LOCAL_STORAGE_DIR, S3_BUCKET_NAME, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, S3_ENDPOINT_URL, SUPABASE_URL, SUPABASE_KEY, SUPABASE_STORAGE_BUCKET
@@ -126,10 +143,11 @@ class FileService(IFileService):
             file_bytes = await storage_adapter.get_file(file_path_str)
             
             # Extract text based on file type
-            if file_path.suffix.lower() == ".pdf":
+            file_ext = file_path.suffix.lower()
+            
+            if file_ext == ".pdf":
+                # PDF text extraction
                 try:
-                    # For PDF, we need to save temporarily to extract text
-                    # (pypdf needs a file-like object)
                     import tempfile
                     with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
                         tmp_file.write(file_bytes)
@@ -150,8 +168,90 @@ class FileService(IFileService):
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail=f"Error extracting text from PDF: {str(e)}"
                     )
-            else:
-                # Assume text/md file
+            
+            elif file_ext == ".docx":
+                # DOCX text extraction using python-docx
+                if not DOCX_AVAILABLE:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="DOCX support not available. Please install python-docx: pip install python-docx"
+                    )
+                
+                try:
+                    doc = DocxDocument(io.BytesIO(file_bytes))
+                    text_content = ""
+                    
+                    # Extract text from paragraphs
+                    for paragraph in doc.paragraphs:
+                        if paragraph.text.strip():
+                            text_content += paragraph.text + "\n"
+                    
+                    # Extract text from tables
+                    for table in doc.tables:
+                        for row in table.rows:
+                            row_text = []
+                            for cell in row.cells:
+                                if cell.text.strip():
+                                    row_text.append(cell.text.strip())
+                            if row_text:
+                                text_content += " | ".join(row_text) + "\n"
+                    
+                    if not text_content.strip():
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="DOCX file appears to be empty or contains no extractable text"
+                        )
+                    
+                    return text_content
+                except Exception as e:
+                    print(f"Error reading DOCX: {e}")
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Error extracting text from DOCX: {str(e)}"
+                    )
+            
+            elif file_ext == ".doc":
+                # DOC (old Word format) - requires textract library
+                if not DOC_AVAILABLE:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="DOC (old Word format) extraction requires 'textract' library. "
+                               "Install with: pip install textract (requires antiword or LibreOffice). "
+                               "Alternatively, convert DOC to DOCX before uploading."
+                    )
+                
+                try:
+                    # Use textract to extract text from DOC files
+                    # textract requires system dependencies (antiword or LibreOffice)
+                    text_content = textract.process(io.BytesIO(file_bytes), extension='doc').decode('utf-8')
+                    
+                    if not text_content.strip():
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="DOC file appears to be empty or contains no extractable text"
+                        )
+                    
+                    return text_content
+                except HTTPException:
+                    raise
+                except Exception as e:
+                    print(f"Error reading DOC: {e}")
+                    error_msg = str(e)
+                    if "antiword" in error_msg.lower() or "libreoffice" in error_msg.lower():
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"DOC extraction failed: {error_msg}. "
+                                   "Please ensure antiword or LibreOffice is installed on the system. "
+                                   "Alternatively, convert DOC to DOCX before uploading."
+                        )
+                    else:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"Error extracting text from DOC: {error_msg}"
+                        )
+            
+            elif file_ext in [".txt", ".md", ".markdown"]:
+                # Plain text files (TXT, Markdown)
                 try:
                     return file_bytes.decode('utf-8', errors='ignore')
                 except Exception as e:
@@ -159,6 +259,25 @@ class FileService(IFileService):
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail=f"Error reading text file: {str(e)}"
+                    )
+            
+            else:
+                # Unknown file type - try UTF-8 decoding as fallback
+                try:
+                    decoded = file_bytes.decode('utf-8', errors='ignore')
+                    if decoded.strip():
+                        return decoded
+                    else:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"File format '{file_ext}' is not supported for text extraction. "
+                                   "Supported formats: PDF, DOCX, DOC, TXT, MD"
+                        )
+                except Exception as e:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"File format '{file_ext}' is not supported for text extraction. "
+                               "Supported formats: PDF, DOCX, DOC, TXT, MD. Error: {str(e)}"
                     )
         except HTTPException:
             raise
@@ -319,7 +438,9 @@ class FileService(IFileService):
                         else:
                             folder_path = base_folder
                         
-                        # Only process supported file types (PDF, TXT, MD, DOCX, etc.)
+                        # Only process supported file types
+                        # ✅ Full support (text extraction): PDF, TXT, MD, DOCX, DOC
+                        # ⚠️ Storage only (no extraction): RTF, ODT
                         file_ext = Path(filename).suffix.lower()
                         supported_extensions = {'.pdf', '.txt', '.md', '.docx', '.doc', '.rtf', '.odt'}
                         

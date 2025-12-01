@@ -4,6 +4,7 @@ python-multipart
 openai
 anthropic
 pypdf
+python-docx
 python-dotenv
 boto3
 supabase

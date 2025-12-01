@@ -7,7 +7,7 @@ A modern document management system that uses AI to automatically summarize and 
 - **Document Upload**: Multiple upload methods:
   - **"+ New" dropdown**: File Upload and Folder Upload options
   - **Drag-and-drop**: Drag files or folders directly onto the main DriveView area
-  - Supports PDF, TXT, MD, DOCX, and other document formats
+  - Supports PDF, TXT, MD, DOCX (full text extraction), DOC (full text extraction with textract), and other document formats
   - Circular progress indicators for upload and processing status
 - **AI Processing**: Automatically generates concise summaries, tags, and clean Markdown versions using AI providers (OpenRouter, Anthropic Claude, or Mock)
   - Graceful fallback to Mock provider when API keys are unavailable or credits are insufficient
@@ -33,7 +33,9 @@ A modern document management system that uses AI to automatically summarize and 
 ### Backend
 - **FastAPI** (Python 3.11+) - Modern, fast web framework
 - **Uvicorn** - ASGI server for running FastAPI
-- **PyPDF2** - PDF text extraction
+- **pypdf** - PDF text extraction
+- **python-docx** - DOCX text extraction (paragraphs and tables)
+- **textract** - DOC text extraction (optional, requires antiword/LibreOffice)
 - **python-dotenv** - Environment variable management
 - **OpenRouter API** - AI service provider (default) with embedding support
 - **Anthropic API** - Alternative AI service provider

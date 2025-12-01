@@ -14,12 +14,13 @@
 | **PDF** | `.pdf` | `pypdf` | ✅ **Full Support** | Text extraction works, AI processing enabled |
 | **Text** | `.txt` | Built-in | ✅ **Full Support** | UTF-8 decoding, AI processing enabled |
 | **Markdown** | `.md` | Built-in | ✅ **Full Support** | UTF-8 decoding, AI processing enabled |
+| **Word (DOCX)** | `.docx` | `python-docx` | ✅ **Full Support** | Text extraction from paragraphs and tables, AI processing enabled |
+| **Word (DOC)** | `.doc` | `textract` (optional) | ✅ **Full Support** | Requires textract + antiword/LibreOffice, AI processing enabled |
 
 ### ⚠️ **Partially Supported** (Stored but Not Extracted)
 
 | Format | Extension | Status | Issue |
 |--------|-----------|--------|-------|
-| **Word** | `.docx`, `.doc` | ⚠️ **Storage Only** | Files are saved but text extraction NOT implemented |
 | **Rich Text** | `.rtf` | ⚠️ **Storage Only** | Files are saved but text extraction NOT implemented |
 | **OpenDocument** | `.odt` | ⚠️ **Storage Only** | Files are saved but text extraction NOT implemented |
 
@@ -45,22 +46,47 @@
 
 ```python
 async def extract_text(self, file_path: Path) -> str:
-    # Only handles PDF and text files
-    if file_path.suffix.lower() == ".pdf":
+    file_ext = file_path.suffix.lower()
+    
+    if file_ext == ".pdf":
         # PDF extraction using pypdf
         reader = PdfReader(tmp_path)
         text_content = ""
         for page in reader.pages:
             text_content += page.extract_text() + "\n"
         return text_content
-    else:
-        # Assumes all other files are text (UTF-8)
+    
+    elif file_ext == ".docx":
+        # DOCX extraction using python-docx
+        doc = DocxDocument(io.BytesIO(file_bytes))
+        text_content = ""
+        # Extract from paragraphs
+        for paragraph in doc.paragraphs:
+            text_content += paragraph.text + "\n"
+        # Extract from tables
+        for table in doc.tables:
+            for row in table.rows:
+                row_text = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+                if row_text:
+                    text_content += " | ".join(row_text) + "\n"
+        return text_content
+    
+    elif file_ext == ".doc":
+        # DOC extraction using textract (requires antiword/LibreOffice)
+        text_content = textract.process(io.BytesIO(file_bytes), extension='doc').decode('utf-8')
+        return text_content
+    
+    elif file_ext in [".txt", ".md"]:
+        # Plain text files
         return file_bytes.decode('utf-8', errors='ignore')
 ```
 
-**Limitations**:
-- ❌ DOCX files are stored but text is NOT extracted
-- ❌ Binary files (images, Excel, etc.) cannot be decoded as UTF-8
+**Current Support**:
+- ✅ PDF files - Full text extraction
+- ✅ DOCX files - Full text extraction (paragraphs + tables)
+- ✅ DOC files - Full text extraction (requires textract)
+- ✅ TXT/MD files - UTF-8 decoding
+- ❌ Binary files (images, Excel, etc.) - Not supported
 - ❌ No OCR for images
 - ❌ No structured data extraction (Excel, CSV)
 
@@ -93,34 +119,19 @@ supported_extensions = {'.pdf', '.txt', '.md', '.docx', '.doc', '.rtf', '.odt'}
 
 ## How to Add Support for More Formats
 
-### Option 1: Add DOCX Support (Easy - 1-2 hours)
+### ✅ Option 1: DOCX Support (IMPLEMENTED)
 
-**Install Library**:
-```bash
-pip install python-docx
-```
+**Status**: ✅ **COMPLETE** - DOCX support is now fully implemented!
 
-**Update**: `backend/app/services/file_service.py`
+**Library**: `python-docx` (installed)
 
-```python
-from docx import Document
+**Implementation**: 
+- Extracts text from paragraphs
+- Extracts text from tables
+- Handles empty documents gracefully
+- Error handling with clear messages
 
-async def extract_text(self, file_path: Path) -> str:
-    # ... existing PDF handling ...
-    
-    elif file_path.suffix.lower() == ".docx":
-        try:
-            doc = Document(io.BytesIO(file_bytes))
-            text_content = "\n".join([paragraph.text for paragraph in doc.paragraphs])
-            return text_content
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Error extracting text from DOCX: {str(e)}"
-            )
-    
-    # ... rest of code ...
-```
+**Usage**: DOCX files uploaded will now have text extracted and AI processing enabled.
 
 ### Option 2: Add Image OCR Support (Medium - 4-6 hours)
 
@@ -219,18 +230,27 @@ async def extract_text(self, file_path: Path) -> str:
 
 ## Recommended Implementation Plan
 
-### Phase 1: Quick Wins (1-2 days)
-1. **Add DOCX support** (python-docx)
-   - Most requested format
-   - Easy to implement
-   - High impact
+### ✅ Phase 1: Quick Wins (COMPLETE)
+1. ✅ **DOCX support** (python-docx) - **IMPLEMENTED**
+   - Text extraction from paragraphs and tables
+   - AI processing enabled
+   - Full support complete
 
-2. **Add RTF support** (striprtf)
+2. ✅ **DOC support** (textract) - **IMPLEMENTED**
+   - Requires textract library (optional)
+   - Requires system dependencies (antiword or LibreOffice)
+   - AI processing enabled when available
+
+### Phase 2: Additional Formats (Next Steps)
+1. **Add RTF support** (striprtf)
    ```bash
    pip install striprtf
    ```
 
-3. **Update ZIP extraction** to actually extract DOCX/RTF
+2. **Add ODT support** (odfpy or python-odf)
+   ```bash
+   pip install odfpy
+   ```
 
 ### Phase 2: Structured Data (1 week)
 1. **Add Excel support** (openpyxl, pandas)
@@ -312,22 +332,28 @@ curl -X POST http://localhost:8000/upload \
 
 ## Summary
 
-### Current State
-- ✅ **3 formats** fully supported (PDF, TXT, MD)
-- ⚠️ **4 formats** stored but not extracted (DOCX, DOC, RTF, ODT)
+### Current State (Updated)
+- ✅ **5 formats** fully supported (PDF, TXT, MD, DOCX, DOC)
+- ⚠️ **2 formats** stored but not extracted (RTF, ODT)
 - ❌ **Many formats** not supported (Excel, PowerPoint, Images, CSV, etc.)
 
-### Recommendation
-1. **Immediate**: Add DOCX support (high impact, easy)
-2. **Short-term**: Add Excel and CSV support (structured data)
-3. **Long-term**: Add Image OCR and PowerPoint support
+### Recent Updates
+- ✅ **DOCX**: Full support implemented (python-docx)
+- ✅ **DOC**: Full support implemented (textract, optional)
 
-### Estimated Effort
-- **DOCX**: 1-2 hours
+### Recommendation
+1. ✅ **COMPLETE**: DOCX and DOC support added
+2. **Short-term**: Add Excel and CSV support (structured data)
+3. **Medium-term**: Add RTF and ODT support
+4. **Long-term**: Add Image OCR and PowerPoint support
+
+### Estimated Effort (Remaining)
+- **RTF**: 2-3 hours
+- **ODT**: 2-3 hours
 - **Excel/CSV**: 4-6 hours
 - **Image OCR**: 4-6 hours (plus Tesseract installation)
 - **PowerPoint**: 4-6 hours
-- **Total**: ~2-3 days for full format support
+- **Total**: ~2-3 days for remaining format support
 
 ---
 
