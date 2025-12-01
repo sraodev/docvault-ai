@@ -959,20 +959,65 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                                         <p className="text-xs font-medium text-slate-700 text-center line-clamp-2 px-1 break-words w-full min-w-0 max-w-full">
                                             {extractFilename(doc.filename)}
                                         </p>
+                                        
+                                        {/* Last Modified Date */}
+                                        {(doc.modified_date || doc.upload_date) && (
+                                            <p className="mt-1 text-[9px] text-slate-400">
+                                                {(() => {
+                                                    const date = new Date(doc.modified_date || doc.upload_date)
+                                                    const now = new Date()
+                                                    const diffTime = Math.abs(now.getTime() - date.getTime())
+                                                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+                                                    
+                                                    // Show relative date for recent files, absolute for older
+                                                    if (diffDays <= 7) {
+                                                        if (diffDays === 0) return 'Today'
+                                                        if (diffDays === 1) return 'Yesterday'
+                                                        return `${diffDays} days ago`
+                                                    }
+                                                    
+                                                    // Show formatted date for older files
+                                                    return date.toLocaleDateString('en-US', { 
+                                                        month: 'short', 
+                                                        day: 'numeric',
+                                                        year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+                                                    })
+                                                })()}
+                                            </p>
+                                        )}
+                                        
                                         {doc.size && (
-                                            <p className="mt-1 text-[10px] text-slate-500">
+                                            <p className="mt-0.5 text-[9px] text-slate-500">
                                                 {formatFileSize(doc.size)}
                                             </p>
                                         )}
+                                        
+                                        {/* Category Tag - Bottom Right */}
+                                        {doc.document_category && doc.status === 'completed' && (
+                                            <div className="absolute bottom-2 right-2">
+                                                <span className={cn(
+                                                    "inline-block px-1.5 py-0.5 rounded text-[8px] font-medium shadow-sm",
+                                                    doc.document_category.toLowerCase().includes('invoice') ? "bg-blue-100 text-blue-700" :
+                                                    doc.document_category.toLowerCase().includes('agreement') || doc.document_category.toLowerCase().includes('contract') ? "bg-purple-100 text-purple-700" :
+                                                    doc.document_category.toLowerCase().includes('resume') ? "bg-green-100 text-green-700" :
+                                                    doc.document_category.toLowerCase().includes('medical') ? "bg-red-100 text-red-700" :
+                                                    doc.document_category.toLowerCase().includes('code') ? "bg-orange-100 text-orange-700" :
+                                                    "bg-slate-100 text-slate-700"
+                                                )}>
+                                                    {doc.document_category}
+                                                </span>
+                                            </div>
+                                        )}
                                     </div>
 
-                                    {/* Progress Bar - Same as folders */}
+                                    {/* Progress Bar - Small size for file cards */}
                                     {isUploading && (
-                                        <div className="px-2 pb-2 flex-shrink-0">
+                                        <div className="absolute top-2 right-2 z-10">
                                             <ProgressBar
                                                 status={doc.status}
                                                 progress={doc.uploadProgress ?? uploadProgress?.get(doc.id)}
                                                 showLabel={false}
+                                                size="small"
                                             />
                                         </div>
                                     )}

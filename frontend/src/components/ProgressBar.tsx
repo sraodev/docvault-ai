@@ -9,9 +9,40 @@ interface ProgressBarProps {
     status: 'uploading' | 'processing' | 'completed' | 'failed'
     progress?: number  // 0-100 for uploading, undefined for processing
     showLabel?: boolean
+    size?: 'small' | 'medium' | 'large'  // Size variant: small (24px), medium (32px), large (40px)
 }
 
-export function ProgressBar({ status, progress, showLabel = true }: ProgressBarProps) {
+export function ProgressBar({ status, progress, showLabel = true, size = 'medium' }: ProgressBarProps) {
+    // Size configuration
+    const sizeConfig = {
+        small: {
+            container: 'w-6 h-6',  // 24px
+            svg: 'w-6 h-6',
+            radius: 10,
+            strokeWidth: 2,
+            textSize: 'text-[8px]',
+            checkmarkSize: 'w-3 h-3'
+        },
+        medium: {
+            container: 'w-8 h-8',  // 32px
+            svg: 'w-8 h-8',
+            radius: 13,
+            strokeWidth: 2.5,
+            textSize: 'text-[9px]',
+            checkmarkSize: 'w-4 h-4'
+        },
+        large: {
+            container: 'w-10 h-10',  // 40px
+            svg: 'w-10 h-10',
+            radius: 16,
+            strokeWidth: 3,
+            textSize: 'text-[10px]',
+            checkmarkSize: 'w-5 h-5'
+        }
+    }
+    
+    const config = sizeConfig[size]
+    
     const getStatusColor = () => {
         switch (status) {
             case 'uploading':
@@ -58,7 +89,7 @@ export function ProgressBar({ status, progress, showLabel = true }: ProgressBarP
     }
 
     // Calculate circle progress (for uploading with percentage)
-    const radius = 16
+    const radius = config.radius
     const circumference = 2 * Math.PI * radius
     const progressValue = status === 'uploading' && progress !== undefined ? Math.max(0, Math.min(100, progress)) : (status === 'processing' ? 0 : 100)
     // Calculate strokeDashoffset: when progress is 0%, offset should be full circumference (empty)
@@ -68,9 +99,9 @@ export function ProgressBar({ status, progress, showLabel = true }: ProgressBarP
     return (
         <div className="flex items-center gap-2">
             {/* Circular Progress */}
-            <div className="relative w-10 h-10 flex items-center justify-center shrink-0">
+            <div className={cn("relative flex items-center justify-center shrink-0", config.container)}>
                 <svg
-                    className="w-10 h-10 transform -rotate-90"
+                    className={cn("transform -rotate-90", config.svg)}
                     viewBox="0 0 36 36"
                 >
                     {/* Background circle */}
@@ -79,7 +110,7 @@ export function ProgressBar({ status, progress, showLabel = true }: ProgressBarP
                         cy="18"
                         r={radius}
                         stroke="currentColor"
-                        strokeWidth="3"
+                        strokeWidth={config.strokeWidth}
                         fill="none"
                         className="text-slate-200"
                     />
@@ -91,7 +122,7 @@ export function ProgressBar({ status, progress, showLabel = true }: ProgressBarP
                             cy="18"
                             r={radius}
                             stroke="currentColor"
-                            strokeWidth="3"
+                            strokeWidth={config.strokeWidth}
                             fill="none"
                             strokeDasharray={`${circumference * 0.3} ${circumference * 0.7}`}
                             strokeLinecap="round"
@@ -111,7 +142,7 @@ export function ProgressBar({ status, progress, showLabel = true }: ProgressBarP
                             cy="18"
                             r={radius}
                             stroke="currentColor"
-                            strokeWidth="3"
+                            strokeWidth={config.strokeWidth}
                             fill="none"
                             strokeDasharray={circumference}
                             strokeDashoffset={strokeDashoffset}
@@ -128,7 +159,7 @@ export function ProgressBar({ status, progress, showLabel = true }: ProgressBarP
                             cy="18"
                             r={radius}
                             stroke="currentColor"
-                            strokeWidth="3"
+                            strokeWidth={config.strokeWidth}
                             fill="none"
                             strokeDasharray={circumference}
                             strokeDashoffset="0"
@@ -139,13 +170,13 @@ export function ProgressBar({ status, progress, showLabel = true }: ProgressBarP
                 </svg>
                 {/* Center text for percentage (only show for uploading with progress) */}
                 {status === 'uploading' && progress !== undefined && (
-                    <span className="absolute text-[10px] font-semibold text-red-600 pointer-events-none">
+                    <span className={cn("absolute font-semibold text-red-600 pointer-events-none", config.textSize)}>
                         {progress}%
                     </span>
                 )}
                 {/* Checkmark for completed */}
                 {status === 'completed' && (
-                    <svg className="absolute w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className={cn("absolute text-blue-600", config.checkmarkSize)} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                     </svg>
                 )}

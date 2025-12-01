@@ -101,20 +101,18 @@ async def process_document_background_async(doc_id: str, file_path: Path):
         current_doc_before = await db_service.get_document(doc_id)
         existing_folder_before = current_doc_before.get("folder") if current_doc_before else None
         
+        # 4. Classify document (for display tag on file card)
         document_category = None
-        smart_folder_path = None
-        # Smart Folder classification disabled - uncomment below to re-enable
-        # try:
-        #     document_category = ai_service.classify_document(text_content, summary)
-        #     if document_category and document_category != "Other":
-        #         if existing_folder_before:
-        #             smart_folder_path = f"{existing_folder_before}/Smart Folders/{document_category}"
-        #         else:
-        #             smart_folder_path = f"Smart Folders/{document_category}"
-        #         print(f"Document {doc_id} classified as: {document_category} (smart folder: {smart_folder_path})")
-        #         # ... folder creation code ...
-        # except Exception as classify_error:
-        #     print(f"AI classification failed for {doc_id}: {classify_error}")
+        try:
+            document_category = ai_service.classify_document(text_content, summary)
+            if document_category and document_category.strip():
+                document_category = document_category.strip()
+                print(f"Document {doc_id} classified as: {document_category}")
+            else:
+                document_category = None
+        except Exception as classify_error:
+            print(f"AI classification failed for {doc_id}: {classify_error}")
+            document_category = None
         
         # 5. Extract structured fields based on document category
         extracted_fields = {}
@@ -187,6 +185,7 @@ async def process_document_background_async(doc_id: str, file_path: Path):
             "summary": summary,
             "markdown_path": md_filename,  # Store relative path, not absolute
             "tags": tags,  # AI-generated tags (or rule-based fallback)
+            "document_category": document_category,  # Document classification (Invoice, Agreement, Resume, etc.)
             "extracted_fields": extracted_fields if extracted_fields else None,  # Structured fields extracted by AI
             "embedding": embedding if embedding else None,  # Vector embedding for semantic search
             "status": "completed",
