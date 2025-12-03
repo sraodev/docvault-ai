@@ -1,6 +1,9 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+from ..core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # Load environment variables (only in development)
 # In containers, environment variables are set directly

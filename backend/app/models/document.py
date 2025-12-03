@@ -1,5 +1,8 @@
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
+from ..core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class DocumentMetadata(BaseModel):
     id: str

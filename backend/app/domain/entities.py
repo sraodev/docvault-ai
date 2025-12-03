@@ -6,6 +6,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 from .value_objects import FileChecksum, FilePath, FolderPath
+from ..core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 @dataclass
 class Document:

@@ -12,6 +12,9 @@ from ..domain.entities import Document
 from ..domain.value_objects import FileChecksum, FolderPath
 from ..repositories.interfaces import IDocumentRepository
 from ..core.config import UPLOAD_DIR
+from ..core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class DocumentService(IDocumentService):
     """

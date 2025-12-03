@@ -9,6 +9,9 @@ from supabase import create_client, Client
 from supabase.lib.client_options import ClientOptions
 
 from .base import FileStorageInterface
+from ...core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class SupabaseFileStorage(FileStorageInterface):
     """

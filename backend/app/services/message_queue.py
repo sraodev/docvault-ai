@@ -11,6 +11,9 @@ Uses Redis as broker for high-performance message queuing.
 """
 from celery import Celery
 from ..core.config import CELERY_BROKER_URL, CELERY_RESULT_BACKEND
+from ..core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # Create Celery app
 celery_app = Celery(

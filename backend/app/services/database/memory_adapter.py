@@ -8,6 +8,9 @@ from datetime import datetime
 import copy
 
 from .base import DatabaseInterface
+from ...core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class MemoryAdapter(DatabaseInterface):
     """

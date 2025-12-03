@@ -12,6 +12,9 @@ from fastapi import UploadFile
 from .upload_queue import UploadTask, UploadStatus
 from .file_service import FileService
 from ..core.config import UPLOAD_DIR
+from ..core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class UploadProcessor:
     """
@@ -40,6 +43,7 @@ class UploadProcessor:
         Returns:
             Dict with status and result/error information
         """
+        logger.debug(f"Processing upload task: {task.filename} (task_id: {task.task_id})")
         try:
             # Generate document ID
             doc_id = str(uuid.uuid4())
@@ -65,6 +69,7 @@ class UploadProcessor:
             # Check for duplicate
             duplicate_doc = await self.db_service.find_document_by_checksum(file_checksum)
             if duplicate_doc:
+                logger.info(f"Duplicate file detected: {task.filename} (existing: {duplicate_doc.get('filename')})")
                 # Delete the just uploaded file since it's a duplicate
                 await self.file_service.delete_file(save_path_relative)
                 return {
@@ -100,10 +105,10 @@ class UploadProcessor:
                                     "created_date": datetime.now().isoformat()
                                 }
                                 await self.db_service.create_folder(folder_data)
-                                print(f"Created folder: {parent_path}")
+                                logger.debug(f"Created folder: {parent_path}")
                 except Exception as folder_err:
                     # Don't fail upload if folder creation fails
-                    print(f"Note: Folder creation skipped for '{normalized_folder}': {folder_err}")
+                    logger.warning(f"Folder creation skipped for '{normalized_folder}': {folder_err}")
             
             # Create document metadata
             upload_time = datetime.now().isoformat()
@@ -123,6 +128,7 @@ class UploadProcessor:
             
             # Save to database
             doc_meta = await self.db_service.create_document(doc_meta)
+            logger.info(f"Successfully uploaded and saved document: {task.filename} (doc_id: {doc_id})")
             
             return {
                 "status": "success",
@@ -132,6 +138,7 @@ class UploadProcessor:
             
         except Exception as e:
             error_msg = f"{type(e).__name__}: {str(e)}"
+            logger.error(f"Error processing upload task {task.task_id} ({task.filename}): {error_msg}", exc_info=True)
             return {
                 "status": "error",
                 "error": error_msg,

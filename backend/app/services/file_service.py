@@ -2,33 +2,21 @@
 File service implementation.
 Handles file operations using plug-and-play storage adapters.
 Supports local filesystem, S3, and Supabase Storage.
+
+Uses modular text extractors for different file formats.
 """
 from pathlib import Path
 from fastapi import UploadFile, HTTPException, status
-from pypdf import PdfReader
 import zipfile
 import io
 from typing import List, Tuple, Optional
-
-# Import DOCX support (optional - will fail gracefully if not installed)
-try:
-    from docx import Document as DocxDocument
-    DOCX_AVAILABLE = True
-except ImportError:
-    DOCX_AVAILABLE = False
-    print("⚠️  python-docx not installed. DOCX files will be stored but text extraction will fail.")
-
-# Import DOC support (optional - requires textract library)
-try:
-    import textract
-    DOC_AVAILABLE = True
-except ImportError:
-    DOC_AVAILABLE = False
-    print("⚠️  textract not installed. DOC files will be stored but text extraction will fail. "
-          "Install with: pip install textract (requires antiword or LibreOffice)")
+from ..core.logging_config import get_logger
 from .interfaces import IFileService
 from .storage import FileStorageFactory, FileStorageInterface
+from .text_extractors import TextExtractorFactory
 from ..core.config import STORAGE_TYPE, LOCAL_STORAGE_DIR, S3_BUCKET_NAME, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, S3_ENDPOINT_URL, SUPABASE_URL, SUPABASE_KEY, SUPABASE_STORAGE_BUCKET
+
+logger = get_logger(__name__)
 
 class FileService(IFileService):
     """
@@ -100,7 +88,7 @@ class FileService(IFileService):
                 file_path = str(destination)
             await storage_adapter.save_file(file, file_path)
         except Exception as e:
-            print(f"Error saving upload: {e}")
+            logger.error(f"Error saving upload: {e}", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Could not save file: {str(e)}"
@@ -108,13 +96,20 @@ class FileService(IFileService):
     
     async def extract_text(self, file_path: Path) -> str:
         """
-        Extract text from file using storage adapter.
+        Extract text from file using modular text extractors.
+        
+        Uses the TextExtractorFactory to automatically select the appropriate
+        extractor based on file extension. This makes it easy to add support
+        for new file formats by creating a new extractor class.
         
         Args:
             file_path: Storage path of the file (can be absolute or relative)
             
         Returns:
             Extracted text content
+            
+        Raises:
+            HTTPException: If file not found, extraction fails, or format not supported
         """
         try:
             storage_adapter = await self.get_storage()
@@ -142,147 +137,17 @@ class FileService(IFileService):
             # Get file content
             file_bytes = await storage_adapter.get_file(file_path_str)
             
-            # Extract text based on file type
-            file_ext = file_path.suffix.lower()
+            # Use modular extractor factory to extract text
+            # This automatically selects the appropriate extractor based on file extension
+            text_content = TextExtractorFactory.extract_text(file_bytes, file_path)
             
-            if file_ext == ".pdf":
-                # PDF text extraction
-                try:
-                    import tempfile
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
-                        tmp_file.write(file_bytes)
-                        tmp_path = Path(tmp_file.name)
-                    
-                    try:
-                        reader = PdfReader(tmp_path)
-                        text_content = ""
-                        for page in reader.pages:
-                            text_content += page.extract_text() + "\n"
-                        return text_content
-                    finally:
-                        # Clean up temp file
-                        tmp_path.unlink()
-                except Exception as e:
-                    print(f"Error reading PDF: {e}")
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"Error extracting text from PDF: {str(e)}"
-                    )
+            logger.debug(f"Successfully extracted text from {file_path} ({len(text_content)} chars)")
+            return text_content
             
-            elif file_ext == ".docx":
-                # DOCX text extraction using python-docx
-                if not DOCX_AVAILABLE:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="DOCX support not available. Please install python-docx: pip install python-docx"
-                    )
-                
-                try:
-                    doc = DocxDocument(io.BytesIO(file_bytes))
-                    text_content = ""
-                    
-                    # Extract text from paragraphs
-                    for paragraph in doc.paragraphs:
-                        if paragraph.text.strip():
-                            text_content += paragraph.text + "\n"
-                    
-                    # Extract text from tables
-                    for table in doc.tables:
-                        for row in table.rows:
-                            row_text = []
-                            for cell in row.cells:
-                                if cell.text.strip():
-                                    row_text.append(cell.text.strip())
-                            if row_text:
-                                text_content += " | ".join(row_text) + "\n"
-                    
-                    if not text_content.strip():
-                        raise HTTPException(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            detail="DOCX file appears to be empty or contains no extractable text"
-                        )
-                    
-                    return text_content
-                except Exception as e:
-                    print(f"Error reading DOCX: {e}")
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"Error extracting text from DOCX: {str(e)}"
-                    )
-            
-            elif file_ext == ".doc":
-                # DOC (old Word format) - requires textract library
-                if not DOC_AVAILABLE:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="DOC (old Word format) extraction requires 'textract' library. "
-                               "Install with: pip install textract (requires antiword or LibreOffice). "
-                               "Alternatively, convert DOC to DOCX before uploading."
-                    )
-                
-                try:
-                    # Use textract to extract text from DOC files
-                    # textract requires system dependencies (antiword or LibreOffice)
-                    text_content = textract.process(io.BytesIO(file_bytes), extension='doc').decode('utf-8')
-                    
-                    if not text_content.strip():
-                        raise HTTPException(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            detail="DOC file appears to be empty or contains no extractable text"
-                        )
-                    
-                    return text_content
-                except HTTPException:
-                    raise
-                except Exception as e:
-                    print(f"Error reading DOC: {e}")
-                    error_msg = str(e)
-                    if "antiword" in error_msg.lower() or "libreoffice" in error_msg.lower():
-                        raise HTTPException(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            detail=f"DOC extraction failed: {error_msg}. "
-                                   "Please ensure antiword or LibreOffice is installed on the system. "
-                                   "Alternatively, convert DOC to DOCX before uploading."
-                        )
-                    else:
-                        raise HTTPException(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            detail=f"Error extracting text from DOC: {error_msg}"
-                        )
-            
-            elif file_ext in [".txt", ".md", ".markdown"]:
-                # Plain text files (TXT, Markdown)
-                try:
-                    return file_bytes.decode('utf-8', errors='ignore')
-                except Exception as e:
-                    print(f"Error reading text file: {e}")
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"Error reading text file: {str(e)}"
-                    )
-            
-            else:
-                # Unknown file type - try UTF-8 decoding as fallback
-                try:
-                    decoded = file_bytes.decode('utf-8', errors='ignore')
-                    if decoded.strip():
-                        return decoded
-                    else:
-                        raise HTTPException(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            detail=f"File format '{file_ext}' is not supported for text extraction. "
-                                   "Supported formats: PDF, DOCX, DOC, TXT, MD"
-                        )
-                except Exception as e:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"File format '{file_ext}' is not supported for text extraction. "
-                               "Supported formats: PDF, DOCX, DOC, TXT, MD. Error: {str(e)}"
-                    )
         except HTTPException:
             raise
         except Exception as e:
-            print(f"General file error: {e}")
+            logger.error(f"General file error: {e}", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Error processing file: {str(e)}"
@@ -300,7 +165,7 @@ class FileService(IFileService):
             file_path_str = str(file_path)
             await storage_adapter.delete_file(file_path_str)
         except Exception as e:
-            print(f"Error deleting file {file_path}: {e}")
+            logger.error(f"Error deleting file {file_path}: {e}", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Could not delete file: {str(e)}"
@@ -330,7 +195,7 @@ class FileService(IFileService):
                 file_path = str(destination)
             await storage_adapter.save_text(content, file_path)
         except Exception as e:
-            print(f"Error saving markdown: {e}")
+            logger.error(f"Error saving markdown: {e}", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Could not save markdown: {str(e)}"
@@ -447,10 +312,10 @@ class FileService(IFileService):
                         if file_ext in supported_extensions or not file_ext:
                             extracted_files.append((file_bytes, filename, folder_path))
                         else:
-                            print(f"Skipping unsupported file type: {filename} ({file_ext})")
+                            logger.warning(f"Skipping unsupported file type: {filename} ({file_ext})")
                     
                     except Exception as e:
-                        print(f"Error extracting file {file_path} from ZIP: {e}")
+                        logger.warning(f"Error extracting file {file_path} from ZIP: {e}", exc_info=True)
                         continue
             
             if not extracted_files and not folder_paths:
@@ -469,7 +334,7 @@ class FileService(IFileService):
                 detail="Invalid or corrupted ZIP file"
             )
         except Exception as e:
-            print(f"Error extracting ZIP file: {e}")
+            logger.error(f"Error extracting ZIP file: {e}", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Error extracting ZIP file: {str(e)}"

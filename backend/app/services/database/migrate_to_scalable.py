@@ -24,7 +24,7 @@ def migrate_legacy_to_scalable(legacy_data_dir: Path, scalable_data_dir: Path):
         legacy_data_dir: Directory containing documents.json and folders.json
         scalable_data_dir: Directory for scalable database (will be created)
     """
-    print(f"🔄 Starting migration from {legacy_data_dir} to {scalable_data_dir}")
+    logger.info(f"🔄 Starting migration from {legacy_data_dir} to {scalable_data_dir}")
     
     # Create scalable database directories
     scalable_data_dir.mkdir(parents=True, exist_ok=True)
@@ -45,27 +45,27 @@ def migrate_legacy_to_scalable(legacy_data_dir: Path, scalable_data_dir: Path):
     
     # Load documents
     if legacy_docs_file.exists():
-        print(f"📖 Loading documents from {legacy_docs_file}")
+        logger.info(f"📖 Loading documents from {legacy_docs_file}")
         try:
             with open(legacy_docs_file, 'r', encoding='utf-8') as f:
                 documents = json.load(f)
-            print(f"   Loaded {len(documents)} documents")
+            logger.info(f"   Loaded {len(documents)} documents")
         except Exception as e:
-            print(f"   ⚠️  Error loading documents: {e}")
+            logger.error(f"   ⚠️  Error loading documents: {e}")
     else:
-        print(f"   ⚠️  {legacy_docs_file} not found, skipping documents")
+        logger.warning(f"   ⚠️  {legacy_docs_file} not found, skipping documents")
     
     # Load folders
     if legacy_folders_file.exists():
-        print(f"📖 Loading folders from {legacy_folders_file}")
+        logger.info(f"📖 Loading folders from {legacy_folders_file}")
         try:
             with open(legacy_folders_file, 'r', encoding='utf-8') as f:
                 folders = json.load(f)
-            print(f"   Loaded {len(folders)} folders")
+            logger.info(f"   Loaded {len(folders)} folders")
         except Exception as e:
-            print(f"   ⚠️  Error loading folders: {e}")
+            logger.error(f"   ⚠️  Error loading folders: {e}")
     else:
-        print(f"   ⚠️  {legacy_folders_file} not found, skipping folders")
+        logger.warning(f"   ⚠️  {legacy_folders_file} not found, skipping folders")
     
     # Initialize index
     index = {
@@ -74,7 +74,7 @@ def migrate_legacy_to_scalable(legacy_data_dir: Path, scalable_data_dir: Path):
     }
     
     # Migrate documents
-    print(f"📝 Migrating {len(documents)} documents to shard-based storage...")
+    logger.info(f"📝 Migrating {len(documents)} documents to shard-based storage...")
     migrated_count = 0
     
     for doc_id, doc_data in documents.items():
@@ -119,15 +119,15 @@ def migrate_legacy_to_scalable(legacy_data_dir: Path, scalable_data_dir: Path):
             migrated_count += 1
             
             if migrated_count % 100 == 0:
-                print(f"   Migrated {migrated_count}/{len(documents)} documents...")
+                logger.info(f"   Migrated {migrated_count}/{len(documents)} documents...")
         
         except Exception as e:
-            print(f"   ⚠️  Error migrating document {doc_id}: {e}")
+            logger.error(f"   ⚠️  Error migrating document {doc_id}: {e}")
     
-    print(f"✅ Migrated {migrated_count} documents")
+    logger.info(f"✅ Migrated {migrated_count} documents")
     
     # Migrate folders
-    print(f"📁 Migrating {len(folders)} folders...")
+    logger.info(f"📁 Migrating {len(folders)} folders...")
     for folder_path, folder_data in folders.items():
         try:
             # Sanitize folder path for filename
@@ -137,27 +137,30 @@ def migrate_legacy_to_scalable(legacy_data_dir: Path, scalable_data_dir: Path):
             with open(folder_file, 'w', encoding='utf-8') as f:
                 json.dump(folder_data, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            print(f"   ⚠️  Error migrating folder {folder_path}: {e}")
+            logger.error(f"   ⚠️  Error migrating folder {folder_path}: {e}")
     
-    print(f"✅ Migrated {len(folders)} folders")
+    logger.info(f"✅ Migrated {len(folders)} folders")
     
     # Save index
     index_file = scalable_data_dir / "index.json"
-    print(f"💾 Saving index to {index_file}")
+    logger.info(f"💾 Saving index to {index_file}")
     with open(index_file, 'w', encoding='utf-8') as f:
         json.dump(index, f, indent=2, ensure_ascii=False)
     
-    print(f"✅ Migration complete!")
-    print(f"   📊 Statistics:")
-    print(f"      - Documents: {len(index['documents'])}")
-    print(f"      - Folders: {len(folders)}")
-    print(f"      - Shards: {len(set(entry['shard'] for entry in index['documents'].values()))}")
-    print(f"   📁 New database location: {scalable_data_dir}")
+    logger.info(f"✅ Migration complete!")
+    logger.info(f"   📊 Statistics:")
+    logger.info(f"      - Documents: {len(index['documents'])}")
+    logger.info(f"      - Folders: {len(folders)}")
+    logger.info(f"      - Shards: {len(set(entry['shard'] for entry in index['documents'].values()))}")
+    logger.info(f"   📁 New database location: {scalable_data_dir}")
 
 
 async def main():
     """Main migration function."""
     import sys
+from ...core.logging_config import get_logger
+
+logger = get_logger(__name__)
     
     # Default paths
     base_dir = Path(__file__).resolve().parent.parent.parent.parent
@@ -172,30 +175,30 @@ async def main():
     
     # Check if legacy database exists
     if not (legacy_data_dir / "documents.json").exists() and not (legacy_data_dir / "folders.json").exists():
-        print(f"⚠️  No legacy database found at {legacy_data_dir}")
-        print(f"   Migration not needed or database already migrated.")
+        logger.warning(f"⚠️  No legacy database found at {legacy_data_dir}")
+        logger.info(f"   Migration not needed or database already migrated.")
         return
     
     # Confirm migration
-    print(f"⚠️  This will migrate your database from:")
-    print(f"   {legacy_data_dir}")
-    print(f"   to:")
-    print(f"   {scalable_data_dir}")
-    print(f"\n   The original files will NOT be deleted.")
-    print(f"   Continue? (yes/no): ", end='')
+    logger.warning(f"⚠️  This will migrate your database from:")
+    logger.info(f"   {legacy_data_dir}")
+    logger.info(f"   to:")
+    logger.info(f"   {scalable_data_dir}")
+    logger.info(f"\n   The original files will NOT be deleted.")
+    logger.info(f"   Continue? (yes/no): ", end='")
     
     response = input().strip().lower()
     if response not in ['yes', 'y']:
-        print("Migration cancelled.")
+        logger.info("Migration cancelled.")
         return
     
     # Perform migration
     migrate_legacy_to_scalable(legacy_data_dir, scalable_data_dir)
     
-    print(f"\n🎉 Migration successful!")
-    print(f"   To use the new database, set:")
-    print(f"   DATABASE_TYPE=scalable_json")
-    print(f"   JSON_DB_PATH={scalable_data_dir}")
+    logger.info(f"\n🎉 Migration successful!")
+    logger.info(f"   To use the new database, set:")
+    logger.info(f"   DATABASE_TYPE=scalable_json")
+    logger.info(f"   JSON_DB_PATH={scalable_data_dir}")
 
 
 if __name__ == "__main__":

@@ -5,6 +5,9 @@ Extracted from documents router to follow Single Responsibility Principle.
 from pathlib import Path
 from typing import Dict, Any, Optional
 from datetime import datetime
+from ..core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 async def ensure_document_fields(

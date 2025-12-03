@@ -14,6 +14,10 @@ from ..services.search_service import SearchService
 from ..core.config import DATABASE_TYPE, JSON_DB_PATH
 from pathlib import Path
 
+from ..core.logging_config import get_logger
+
+logger = get_logger(__name__)
+
 # Optional cache service import (requires aioredis)
 try:
     from ..services.cache_service import CacheService
@@ -37,14 +41,24 @@ async def initialize_database():
     """Initialize database adapter based on configuration."""
     global db_service
     
+    logger.info(f"Initializing database: {DATABASE_TYPE}")
+    
     if DATABASE_TYPE.lower() == "json":
         data_dir = Path(JSON_DB_PATH) if JSON_DB_PATH else None
+        logger.info(f"  → Database Type: JSON (file-based, legacy)")
+        logger.debug(f"  → Database Path: {data_dir}")
         db_service = await DatabaseFactory.create_and_initialize("json", data_dir=data_dir)
+        logger.info("  ✅ JSON Database initialized")
     elif DATABASE_TYPE.lower() == "scalable_json":
         data_dir = Path(JSON_DB_PATH) if JSON_DB_PATH else None
+        logger.info(f"  → Database Type: Scalable JSON (shard-based, scalable to 500K+ records)")
+        logger.debug(f"  → Database Path: {data_dir}")
         db_service = await DatabaseFactory.create_and_initialize("scalable_json", data_dir=data_dir)
+        logger.info("  ✅ Scalable JSON Database initialized")
     elif DATABASE_TYPE.lower() == "memory":
+        logger.info("  → Database Type: Memory (in-memory, non-persistent)")
         db_service = await DatabaseFactory.create_and_initialize("memory")
+        logger.info("  ✅ Memory Database initialized")
     else:
         raise ValueError(f"Unsupported DATABASE_TYPE: {DATABASE_TYPE}. Supported types: 'json', 'scalable_json', 'memory'")
 
@@ -66,30 +80,63 @@ async def initialize_services():
     if db_service is None:
         await initialize_database()
     
+    logger.info("Initializing services...")
+    
     # Initialize core services
+    logger.info("  → Starting AI Service...")
+    from ..core.config import AI_PROVIDER
+    logger.info(f"    → Provider: {AI_PROVIDER}")
     ai_service = AIService()
+    logger.info("  ✅ AI Service initialized")
+    
+    logger.info("  → Starting File Service...")
+    from ..core.config import STORAGE_TYPE
+    logger.info(f"    → Storage Type: {STORAGE_TYPE}")
     file_service = FileService()
+    logger.info("  ✅ File Service initialized")
     
     # Initialize cache service (Redis) for high-performance caching
     # This is critical for million+ user scale
+    logger.info("  → Starting Cache Service (Redis)...")
     if CACHE_AVAILABLE and CacheService is not None:
         try:
             cache_service = CacheService()
             await cache_service.connect()
-            print("✅ Cache service (Redis) connected")
+            logger.info("  ✅ Cache Service (Redis) connected successfully")
         except Exception as e:
-            print(f"⚠️  Cache service not available (continuing without cache): {e}")
+            logger.warning(f"  ⚠️  Cache Service not available (continuing without cache): {e}")
             cache_service = None
     else:
-        print("⚠️  Cache service not available (aioredis not installed, continuing without cache)")
+        logger.warning("  ⚠️  Cache Service not available (aioredis not installed, continuing without cache)")
         cache_service = None
     
     # Initialize business logic services
+    logger.info("  → Starting Upload Service...")
     upload_service = UploadService(file_service, db_service)
-    document_processing_service = DocumentProcessingService(ai_service, file_service, db_service)
-    search_service = SearchService(ai_service, db_service)
+    logger.info("  ✅ Upload Service initialized")
     
-    print("✅ All services initialized successfully")
+    logger.info("  → Starting Document Processing Service...")
+    document_processing_service = DocumentProcessingService(ai_service, file_service, db_service)
+    logger.info("  ✅ Document Processing Service initialized")
+    
+    logger.info("  → Starting Search Service...")
+    search_service = SearchService(ai_service, db_service)
+    logger.info("  ✅ Search Service initialized")
+    
+    # Summary
+    services_started = [
+        "Database Service",
+        "AI Service",
+        "File Service",
+        "Upload Service",
+        "Document Processing Service",
+        "Search Service"
+    ]
+    if cache_service:
+        services_started.append("Cache Service (Redis)")
+    
+    logger.info(f"✅ All services initialized successfully ({len(services_started)} services)")
+    logger.info(f"   Services started: {', '.join(services_started)}")
 
 
 def get_db_service():

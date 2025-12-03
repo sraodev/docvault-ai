@@ -8,6 +8,9 @@ from .interfaces import IFolderRepository
 from ..domain.entities import Folder
 from ..domain.value_objects import FolderPath
 from ..services.database.base import DatabaseInterface
+from ..core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class FolderRepository(IFolderRepository):
     """

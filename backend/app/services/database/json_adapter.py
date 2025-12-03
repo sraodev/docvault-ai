@@ -12,6 +12,9 @@ import copy
 from threading import Lock
 
 from .base import DatabaseInterface
+from ...core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class JSONAdapter(DatabaseInterface):
     """
@@ -65,7 +68,7 @@ class JSONAdapter(DatabaseInterface):
                 with open(self.documents_file, 'r', encoding='utf-8') as f:
                     self._documents = json.load(f)
             except (json.JSONDecodeError, IOError) as e:
-                print(f"Warning: Could not load documents.json: {e}")
+                logger.warning(f"Warning: Could not load documents.json: {e}")
                 self._documents = {}
         else:
             self._documents = {}
@@ -76,7 +79,7 @@ class JSONAdapter(DatabaseInterface):
                 with open(self.folders_file, 'r', encoding='utf-8') as f:
                     self._folders = json.load(f)
             except (json.JSONDecodeError, IOError) as e:
-                print(f"Warning: Could not load folders.json: {e}")
+                logger.warning(f"Warning: Could not load folders.json: {e}")
                 self._folders = {}
         else:
             self._folders = {}
@@ -113,14 +116,14 @@ class JSONAdapter(DatabaseInterface):
                     with open(self.documents_file, 'w', encoding='utf-8') as f:
                         json.dump(self._documents, f, indent=2, ensure_ascii=False)
                 except IOError as e:
-                    print(f"Error saving documents.json: {e}")
+                    logger.error(f"Error saving documents.json: {e}")
                 
                 # Save folders
                 try:
                     with open(self.folders_file, 'w', encoding='utf-8') as f:
                         json.dump(self._folders, f, indent=2, ensure_ascii=False)
                 except IOError as e:
-                    print(f"Error saving folders.json: {e}")
+                    logger.error(f"Error saving folders.json: {e}")
         
         # Run in executor to avoid blocking
         loop = asyncio.get_event_loop()

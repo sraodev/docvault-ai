@@ -4,6 +4,9 @@ All database implementations must inherit from this class.
 """
 from abc import ABC, abstractmethod
 from typing import List, Dict, Optional
+from ...core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class DatabaseInterface(ABC):
     """

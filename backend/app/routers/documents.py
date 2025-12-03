@@ -78,7 +78,7 @@ async def process_document_background_async(doc_id: str, file_path: Path):
             summary = ai_service.generate_summary(text_content)
             markdown_content = ai_service.generate_markdown(text_content)
         except Exception as ai_error:
-            print(f"AI Service Error for {doc_id}: {ai_error}")
+            logger.error(f"AI Service Error for {doc_id}: {ai_error}", exc_info=True)
         
         # 3. Generate Tags using AI (with summary for better context if available)
         tags = []
@@ -86,13 +86,13 @@ async def process_document_background_async(doc_id: str, file_path: Path):
             # Try AI-generated tags first (preferred method)
             tags = ai_service.generate_tags(text_content, summary)
             if tags and len(tags) > 0:
-                print(f"AI-generated {len(tags)} tags for {doc_id}")
+                logger.info(f"AI-generated {len(tags)} tags for {doc_id}")
             else:
                 # Fallback to rule-based extraction if AI returns empty
-                print(f"AI tags empty for {doc_id}, falling back to rule-based extraction")
+                logger.info(f"AI tags empty for {doc_id}, falling back to rule-based extraction")
                 tags = extract_tags_from_text(text_content, summary)
         except Exception as tag_error:
-            print(f"AI tag generation failed for {doc_id}: {tag_error}, using rule-based extraction")
+            logger.error(f"AI tag generation failed for {doc_id}: {tag_error}, using rule-based extraction", exc_info=True)
             # Fallback to rule-based tag extraction
             tags = extract_tags_from_text(text_content, summary)
         
@@ -107,11 +107,11 @@ async def process_document_background_async(doc_id: str, file_path: Path):
             document_category = ai_service.classify_document(text_content, summary)
             if document_category and document_category.strip():
                 document_category = document_category.strip()
-                print(f"Document {doc_id} classified as: {document_category}")
+                logger.info(f"Document {doc_id} classified as: {document_category}")
             else:
                 document_category = None
         except Exception as classify_error:
-            print(f"AI classification failed for {doc_id}: {classify_error}")
+            logger.error(f"AI classification failed for {doc_id}: {classify_error}", exc_info=True)
             document_category = None
         
         # 5. Extract structured fields based on document category
@@ -120,11 +120,11 @@ async def process_document_background_async(doc_id: str, file_path: Path):
             if document_category:
                 extracted_fields = ai_service.extract_fields(text_content, document_category, summary)
                 if extracted_fields:
-                    print(f"Extracted {len(extracted_fields)} fields for {doc_id} (category: {document_category})")
+                    logger.info(f"Extracted {len(extracted_fields)} fields for {doc_id} (category: {document_category})")
                 else:
-                    print(f"No fields extracted for {doc_id} (category: {document_category})")
+                    logger.info(f"No fields extracted for {doc_id} (category: {document_category})")
         except Exception as field_error:
-            print(f"Field extraction failed for {doc_id}: {field_error}")
+            logger.error(f"Field extraction failed for {doc_id}: {field_error}", exc_info=True)
         
         # 6. Generate embedding for semantic search
         embedding = None
@@ -145,15 +145,15 @@ async def process_document_background_async(doc_id: str, file_path: Path):
             
             embedding = ai_service.generate_embedding(searchable_text)
             if embedding and len(embedding) > 0:
-                print(f"Generated embedding for {doc_id} (dimension: {len(embedding)})")
+                logger.info(f"Generated embedding for {doc_id} (dimension: {len(embedding)})")
             else:
-                print(f"Failed to generate embedding for {doc_id}")
+                logger.error(f"Failed to generate embedding for {doc_id}")
         except Exception as embedding_error:
-            print(f"Embedding generation failed for {doc_id}: {embedding_error}")
+            logger.error(f"Embedding generation failed for {doc_id}: {embedding_error}", exc_info=True)
         
         # Check if AI processing failed (returns None)
         if summary is None or markdown_content is None:
-            print(f"AI Service unavailable for {doc_id} - marking as ready (tags: {'AI-generated' if tags else 'rule-based'})")
+            logger.info(f"AI Service unavailable for {doc_id} - marking as ready (tags: {'AI-generated' if tags else 'rule-based'})")
             
             update_data = {
                 "status": "ready",
@@ -167,10 +167,10 @@ async def process_document_background_async(doc_id: str, file_path: Path):
             # Smart Folder classification disabled - preserve existing folder only
             # if smart_folder_path and not existing_folder_before:
             #     update_data["folder"] = smart_folder_path
-            #     print(f"Auto-classified document {doc_id} to smart folder: {smart_folder_path}")
+            logger.info(f"Auto-classified document {doc_id} to smart folder: {smart_folder_path}")
             # elif smart_folder_path and existing_folder_before:
             #     update_data["folder"] = smart_folder_path
-            #     print(f"Auto-classified document {doc_id} to smart folder within existing folder: {smart_folder_path}")
+            logger.info(f"Auto-classified document {doc_id} to smart folder within existing folder: {smart_folder_path}")
             
             await db_service.update_document(doc_id, update_data)
             return  # Exit early, document is still usable without AI processing
@@ -196,20 +196,20 @@ async def process_document_background_async(doc_id: str, file_path: Path):
         # Preserve manually assigned folder if it exists
         if existing_folder_before:
             # Document already has a folder, preserve it
-            print(f"Document {doc_id} already in folder '{existing_folder_before}', preserving folder assignment")
+            logger.info(f"Document {doc_id} already in folder '{existing_folder_before}', preserving folder assignment")
         # Smart Folder auto-classification disabled - uncomment below to re-enable
         # if smart_folder_path:
         #     update_data["folder"] = smart_folder_path
         #     if existing_folder_before:
-        #         print(f"Auto-classified document {doc_id} to smart folder within existing folder: {smart_folder_path}")
+        logger.info(f"Auto-classified document {doc_id} to smart folder within existing folder: {smart_folder_path}")
         #     else:
-        #         print(f"Auto-classified document {doc_id} to smart folder: {smart_folder_path}")
+        logger.info(f"Auto-classified document {doc_id} to smart folder: {smart_folder_path}")
         
         await db_service.update_document(doc_id, update_data)
         
 
     except Exception as e:
-        print(f"Fatal error processing {doc_id}: {e}")
+        logger.error(f"Fatal error processing {doc_id}: {e}", exc_info=True)
         # Don't mark as failed if it's just AI service unavailable - keep as ready
         error_str = str(e).lower()
         if "insufficient credits" in error_str or "api key" in error_str or "402" in error_str:
@@ -319,7 +319,7 @@ async def upload_file(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error in upload_file: {e}")
+        logger.error(f"Error in upload_file: {e}")
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 async def _handle_zip_upload(
@@ -379,7 +379,7 @@ async def _handle_zip_upload(
                         await db_service.create_folder(folder_data)
                 except Exception as folder_err:
                     # Folder might already exist or creation failed - continue
-                    print(f"Note: Folder '{folder_path}' may already exist or creation skipped: {folder_err}")
+                    logger.warning(f"Note: Folder '{folder_path}' may already exist or creation skipped: {folder_err}")
         
         created_documents = []
         skipped_files = []
@@ -461,7 +461,7 @@ async def _handle_zip_upload(
                 )
                 
             except Exception as e:
-                print(f"Error processing file {filename} from ZIP: {e}")
+                logger.error(f"Error processing file {filename} from ZIP: {e}")
                 errors.append({
                     "filename": filename,
                     "error": str(e)
@@ -483,7 +483,7 @@ async def _handle_zip_upload(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error processing ZIP file: {e}")
+        logger.error(f"Error processing ZIP file: {e}")
         raise HTTPException(status_code=500, detail=f"ZIP extraction failed: {str(e)}")
 
 @router.post("/upload/check-duplicate")
@@ -618,7 +618,7 @@ async def process_single_file_upload_async(
                                     Path(doc["file_path"])
                                 )
                     except Exception as e:
-                        print(f"Error processing extracted file {filename}: {e}")
+                        logger.error(f"Error processing extracted file {filename}: {e}")
                         continue
                 
                 return {
@@ -784,7 +784,7 @@ async def upload_bulk_files(
         )
         
     except Exception as e:
-        print(f"Error in bulk upload: {e}")
+        logger.error(f"Error in bulk upload: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Bulk upload failed: {str(e)}")
@@ -1100,7 +1100,7 @@ async def get_all_tags():
             "total_tags": len(tags_with_case)
         }
     except Exception as e:
-        print(f"Error getting tags: {e}")
+        logger.error(f"Error getting tags: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to retrieve tags: {str(e)}")
 
 @router.get("/documents/search")
@@ -1312,7 +1312,7 @@ async def semantic_search(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error in semantic search: {e}")
+        logger.error(f"Error in semantic search: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
@@ -1439,7 +1439,7 @@ async def get_documents_by_tag(tag: str):
         
         return matching_docs
     except Exception as e:
-        print(f"Error getting documents by tag '{tag}': {e}")
+        logger.error(f"Error getting documents by tag '{tag}': {e}")
         raise HTTPException(status_code=500, detail=f"Failed to retrieve documents by tag: {str(e)}")
 
 @router.post("/documents/folders")
@@ -1512,7 +1512,7 @@ async def create_folder(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error creating folder: {e}")
+        logger.error(f"Error creating folder: {e}")
         raise HTTPException(status_code=500, detail=f"Folder creation failed: {str(e)}")
 
 @router.get("/documents/{doc_id}", response_model=DocumentMetadata)
@@ -1578,7 +1578,7 @@ async def process_document(doc_id: str, background_tasks: BackgroundTasks):
                 found_path = possible_path
                 # Update database with correct path
                 await db_service.update_document(doc_id, {"file_path": str(found_path)})
-                print(f"Fixed file path for {doc_id}: {file_path_str} -> {found_path}")
+                logger.info(f"Fixed file path for {doc_id}: {file_path_str} -> {found_path}")
                 break
         
         if found_path:
@@ -1624,6 +1624,9 @@ async def get_file(filename: str):
         # For S3/Supabase, get file bytes
         file_bytes = await storage_adapter.get_file(file_path)
         from fastapi.responses import Response
+from ..core.logging_config import get_logger
+
+logger = get_logger(__name__)
         return Response(content=file_bytes, media_type="application/octet-stream")
     except HTTPException:
         raise
@@ -1652,7 +1655,7 @@ async def delete_document(doc_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error deleting document {doc_id}: {e}")
+        logger.error(f"Error deleting document {doc_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Deletion failed: {str(e)}")
 
 @router.delete("/documents/folders/{folder_path:path}")
@@ -1679,7 +1682,7 @@ async def delete_folder(folder_path: str):
                     await file_service.delete_file(Path(doc["markdown_path"]))
             except Exception as file_err:
                 # Log but continue with deletion
-                print(f"Error deleting file for folder '{folder_path}': {file_err}")
+                logger.error(f"Error deleting file for folder '{folder_path}': {file_err}")
         
         # Delete from database (this handles both documents and folder metadata)
         deleted_count = await db_service.delete_folder(folder_path)
@@ -1695,7 +1698,7 @@ async def delete_folder(folder_path: str):
             "deleted_count": deleted_count
         }
     except Exception as e:
-        print(f"Error deleting folder '{folder_path}': {e}")
+        logger.error(f"Error deleting folder '{folder_path}': {e}")
         raise HTTPException(status_code=500, detail=f"Folder deletion failed: {str(e)}")
 
 @router.put("/documents/folders/{folder_path:path}/move")
@@ -1718,7 +1721,7 @@ async def move_folder(folder_path: str, new_folder_path: Optional[str] = Form(No
             "moved_count": moved_count
         }
     except Exception as e:
-        print(f"Error moving folder {folder_path}: {e}")
+        logger.error(f"Error moving folder {folder_path}: {e}")
         raise HTTPException(status_code=500, detail=f"Folder move failed: {str(e)}")
 
 @router.get("/documents/missing-summaries")
@@ -1740,7 +1743,7 @@ async def get_missing_summaries(limit: Optional[int] = None):
             "documents": docs
         }
     except Exception as e:
-        print(f"Error getting missing summaries: {e}")
+        logger.error(f"Error getting missing summaries: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get missing summaries: {str(e)}")
 
 @router.post("/documents/{doc_id}/regenerate-summary")
@@ -1784,7 +1787,7 @@ async def regenerate_summary(doc_id: str, background_tasks: BackgroundTasks):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error regenerating summary for {doc_id}: {e}")
+        logger.error(f"Error regenerating summary for {doc_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Summary regeneration failed: {str(e)}")
 
 @router.post("/documents/regenerate-all-summaries")
@@ -1835,5 +1838,5 @@ async def regenerate_all_summaries(
             "processing": True
         }
     except Exception as e:
-        print(f"Error in batch regeneration: {e}")
+        logger.error(f"Error in batch regeneration: {e}")
         raise HTTPException(status_code=500, detail=f"Batch regeneration failed: {str(e)}")

@@ -5,6 +5,9 @@ Separates API contracts from domain entities.
 from pydantic import BaseModel
 from typing import List, Optional, Dict
 from datetime import datetime
+from ..core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class DocumentDTO(BaseModel):
     """Document DTO for API responses."""

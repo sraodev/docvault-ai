@@ -63,31 +63,31 @@ class StorageMigrator:
     
     async def initialize(self):
         """Initialize source and destination storage."""
-        print(f"🔌 Initializing storage...")
+        logger.info(f"🔌 Initializing storage...")
         
         # Initialize source storage
-        print(f"   📥 Source: {self.source_type}")
+        logger.debug(f"   📥 Source: {self.source_type}")
         self.source_storage = await FileStorageFactory.create_and_initialize(
             self.source_type,
             **self.source_config
         )
         
         # Initialize destination storage
-        print(f"   📤 Destination: {self.dest_type}")
+        logger.debug(f"   📤 Destination: {self.dest_type}")
         self.dest_storage = await FileStorageFactory.create_and_initialize(
             self.dest_type,
             **self.dest_config
         )
         
         # Initialize database
-        print(f"   💾 Database: {DATABASE_TYPE}")
+        logger.info(f"   💾 Database: {DATABASE_TYPE}")
         data_dir = Path(JSON_DB_PATH) if JSON_DB_PATH else None
         self.db_service = await DatabaseFactory.create_and_initialize(
             DATABASE_TYPE,
             data_dir=data_dir
         )
         
-        print(f"✅ Storage initialized")
+        logger.info(f"✅ Storage initialized")
     
     async def get_all_file_paths(self) -> List[Dict]:
         """Get all file paths from database."""
@@ -123,38 +123,38 @@ class StorageMigrator:
         try:
             # Check if file exists in source
             if not await self.source_storage.file_exists(file_path):
-                print(f"   ⚠️  File not found in source: {file_path}")
+                logger.warning(f"   ⚠️  File not found in source: {file_path}")
                 self.stats["skipped"] += 1
                 return False
             
             # Check if file already exists in destination
             if await self.dest_storage.file_exists(file_path):
-                print(f"   ⏭️  File already exists in destination: {file_path}")
+                logger.info(f"   ⏭️  File already exists in destination: {file_path}")
                 self.stats["skipped"] += 1
                 return True
             
             # Read file from source
-            print(f"   📥 Reading: {file_path}")
+            logger.debug(f"   📥 Reading: {file_path}")
             file_content = await self.source_storage.get_file(file_path)
             
             # Write file to destination
-            print(f"   📤 Writing: {file_path}")
+            logger.debug(f"   📤 Writing: {file_path}")
             # Save bytes to storage (works for both text and binary files)
             await self._save_bytes_to_storage(self.dest_storage, file_content, file_path)
             
             # Verify file was written
             if await self.dest_storage.file_exists(file_path):
-                print(f"   ✅ Migrated: {file_path}")
+                logger.info(f"   ✅ Migrated: {file_path}")
                 self.stats["migrated"] += 1
                 return True
             else:
-                print(f"   ❌ Verification failed: {file_path}")
+                logger.error(f"   ❌ Verification failed: {file_path}")
                 self.stats["failed"] += 1
                 return False
         
         except Exception as e:
             error_msg = f"Error migrating {file_path}: {str(e)}"
-            print(f"   ❌ {error_msg}")
+            logger.error(f"   ❌ {error_msg}")
             self.stats["failed"] += 1
             self.stats["errors"].append({
                 "file_path": file_path,
@@ -216,25 +216,25 @@ class StorageMigrator:
             update_database: If True, update database references after migration
             dry_run: If True, only show what would be migrated without actually migrating
         """
-        print(f"\n🚀 Starting migration: {self.source_type} → {self.dest_type}")
+        logger.info(f"\n🚀 Starting migration: {self.source_type} → {self.dest_type}")
         if dry_run:
-            print(f"   ⚠️  DRY RUN MODE - No files will be migrated")
+            logger.warning(f"   ⚠️  DRY RUN MODE - No files will be migrated")
         
         # Get all file paths
-        print(f"\n📋 Scanning database for files...")
+        logger.info(f"\n📋 Scanning database for files...")
         file_paths = await self.get_all_file_paths()
         self.stats["total_files"] = len(file_paths)
         
-        print(f"   Found {len(file_paths)} files to migrate")
+        logger.info(f"   Found {len(file_paths)} files to migrate")
         
         if not file_paths:
-            print("   ✅ No files to migrate")
+            logger.info("   ✅ No files to migrate")
             return
         
         # Migrate files
-        print(f"\n📦 Migrating files...")
+        logger.info(f"\n📦 Migrating files...")
         for i, file_info in enumerate(file_paths, 1):
-            print(f"\n[{i}/{len(file_paths)}] {file_info['filename']} ({file_info['file_path']})")
+            logger.info(f"\n[{i}/{len(file_paths)}] {file_info['filename']} ({file_info['file_path']})")
             
             if not dry_run:
                 await self.migrate_file(file_info)
@@ -242,10 +242,10 @@ class StorageMigrator:
                 # Dry run - just check if file exists
                 exists = await self.source_storage.file_exists(file_info["file_path"])
                 if exists:
-                    print(f"   ✅ Would migrate: {file_info['file_path']}")
+                    logger.info(f"   ✅ Would migrate: {file_info['file_path']}")
                     self.stats["migrated"] += 1
                 else:
-                    print(f"   ⚠️  File not found: {file_info['file_path']}")
+                    logger.warning(f"   ⚠️  File not found: {file_info['file_path']}")
                     self.stats["skipped"] += 1
         
         # Print statistics
@@ -253,14 +253,14 @@ class StorageMigrator:
         
         # Update database if requested
         if update_database and not dry_run:
-            print(f"\n💾 Updating database references...")
+            logger.info(f"\n💾 Updating database references...")
             # Database references should remain the same (file_path doesn't change)
             # But we can verify all files are accessible
             await self._verify_migration()
     
     async def _verify_migration(self):
         """Verify all migrated files are accessible."""
-        print(f"   🔍 Verifying migrated files...")
+        logger.info(f"   🔍 Verifying migrated files...")
         
         file_paths = await self.get_all_file_paths()
         verified = 0
@@ -272,26 +272,26 @@ class StorageMigrator:
                 verified += 1
             else:
                 failed += 1
-                print(f"   ❌ File not found in destination: {file_path}")
+                logger.error(f"   ❌ File not found in destination: {file_path}")
         
-        print(f"   ✅ Verified: {verified}/{len(file_paths)} files")
+        logger.info(f"   ✅ Verified: {verified}/{len(file_paths)} files")
         if failed > 0:
-            print(f"   ⚠️  Failed: {failed} files")
+            logger.error(f"   ⚠️  Failed: {failed} files")
     
     def _print_statistics(self):
         """Print migration statistics."""
-        print(f"\n📊 Migration Statistics:")
-        print(f"   Total files: {self.stats['total_files']}")
-        print(f"   ✅ Migrated: {self.stats['migrated']}")
-        print(f"   ⏭️  Skipped: {self.stats['skipped']}")
-        print(f"   ❌ Failed: {self.stats['failed']}")
+        logger.info(f"\n📊 Migration Statistics:")
+        logger.info(f"   Total files: {self.stats['total_files']}")
+        logger.info(f"   ✅ Migrated: {self.stats['migrated']}")
+        logger.warning(f"   ⏭️  Skipped: {self.stats['skipped']}")
+        logger.error(f"   ❌ Failed: {self.stats['failed']}")
         
         if self.stats["errors"]:
-            print(f"\n❌ Errors ({len(self.stats['errors'])}):")
+            logger.error(f"\n❌ Errors ({len(self.stats['errors'])}):")
             for error in self.stats["errors"][:10]:  # Show first 10 errors
-                print(f"   - {error['file_path']}: {error['error']}")
+                logger.error(f"   - {error['file_path']}: {error['error']}")
             if len(self.stats["errors"]) > 10:
-                print(f"   ... and {len(self.stats['errors']) - 10} more errors")
+                logger.error(f"   ... and {len(self.stats['errors']) - 10} more errors")
     
     async def close(self):
         """Close storage connections."""
@@ -337,12 +337,12 @@ async def main():
     
     # Parse command line arguments
     if len(sys.argv) < 3:
-        print("Usage: python -m app.services.storage.migrate_storage <source> <dest> [--dry-run] [--update-db]")
-        print("\nExamples:")
-        print("  python -m app.services.storage.migrate_storage local s3")
-        print("  python -m app.services.storage.migrate_storage s3 supabase --dry-run")
-        print("  python -m app.services.storage.migrate_storage local supabase --update-db")
-        print("\nSupported storage types: local, s3, supabase")
+        logger.info("Usage: python -m app.services.storage.migrate_storage <source> <dest> [--dry-run] [--update-db]")
+        logger.info("\nExamples:")
+        logger.info("  python -m app.services.storage.migrate_storage local s3")
+        logger.info("  python -m app.services.storage.migrate_storage s3 supabase --dry-run")
+        logger.info("  python -m app.services.storage.migrate_storage local supabase --update-db")
+        logger.info("\nSupported storage types: local, s3, supabase")
         return
     
     source_type = sys.argv[1].lower()
@@ -353,23 +353,23 @@ async def main():
     # Validate storage types
     valid_types = ["local", "s3", "supabase"]
     if source_type not in valid_types:
-        print(f"❌ Invalid source type: {source_type}")
-        print(f"   Supported types: {', '.join(valid_types)}")
+        logger.error(f"❌ Invalid source type: {source_type}")
+        logger.info(f"   Supported types: {', '.join(valid_types)}")
         return
     
     if dest_type not in valid_types:
-        print(f"❌ Invalid destination type: {dest_type}")
-        print(f"   Supported types: {', '.join(valid_types)}")
+        logger.error(f"❌ Invalid destination type: {dest_type}")
+        logger.info(f"   Supported types: {', '.join(valid_types)}")
         return
     
     if source_type == dest_type:
-        print(f"❌ Source and destination cannot be the same: {source_type}")
+        logger.error(f"❌ Source and destination cannot be the same: {source_type}")
         return
     
     # Get storage configurations
-    print(f"📋 Configuration:")
-    print(f"   Source: {source_type}")
-    print(f"   Destination: {dest_type}")
+    logger.info(f"📋 Configuration:")
+    logger.info(f"   Source: {source_type}")
+    logger.info(f"   Destination: {dest_type}")
     
     source_config = get_storage_config(source_type)
     dest_config = get_storage_config(dest_type)
@@ -377,31 +377,31 @@ async def main():
     # Check required environment variables
     if source_type == "s3":
         if not source_config.get("bucket_name"):
-            print("❌ S3_BUCKET_NAME environment variable required for source")
+            logger.error("❌ S3_BUCKET_NAME environment variable required for source")
             return
     elif source_type == "supabase":
         if not source_config.get("supabase_url") or not source_config.get("supabase_key"):
-            print("❌ SUPABASE_URL and SUPABASE_KEY environment variables required for source")
+            logger.error("❌ SUPABASE_URL and SUPABASE_KEY environment variables required for source")
             return
     
     if dest_type == "s3":
         if not dest_config.get("bucket_name"):
-            print("❌ S3_BUCKET_NAME environment variable required for destination")
+            logger.error("❌ S3_BUCKET_NAME environment variable required for destination")
             return
     elif dest_type == "supabase":
         if not dest_config.get("supabase_url") or not dest_config.get("supabase_key"):
-            print("❌ SUPABASE_URL and SUPABASE_KEY environment variables required for destination")
+            logger.error("❌ SUPABASE_URL and SUPABASE_KEY environment variables required for destination")
             return
     
     # Confirm migration
-    print(f"\n⚠️  This will migrate files from {source_type} to {dest_type}")
+    logger.warning(f"\n⚠️  This will migrate files from {source_type} to {dest_type}")
     if dry_run:
-        print(f"   DRY RUN MODE - No files will actually be migrated")
-    print(f"   Continue? (yes/no): ", end='')
+        logger.info(f"   DRY RUN MODE - No files will actually be migrated")
+    logger.info(f"   Continue? (yes/no): ", end='")
     
     response = input().strip().lower()
     if response not in ['yes', 'y']:
-        print("Migration cancelled.")
+        logger.info("Migration cancelled.")
         return
     
     # Create migrator and run migration
@@ -416,8 +416,11 @@ async def main():
         await migrator.initialize()
         await migrator.migrate_all(update_database=update_db, dry_run=dry_run)
     except Exception as e:
-        print(f"\n❌ Migration failed: {e}")
+        logger.error(f"\n❌ Migration failed: {e}")
         import traceback
+from ...core.logging_config import get_logger
+
+logger = get_logger(__name__)
         traceback.print_exc()
     finally:
         await migrator.close()

@@ -36,6 +36,9 @@ except ImportError:
     msvcrt = None
 
 from .base import DatabaseInterface
+from ...core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # Configuration constants
 SHARD_SIZE = 1000  # Documents per shard
@@ -201,7 +204,7 @@ class WriteAheadLog:
             self.buffer.clear()
             self.write_count = 0
         except Exception as e:
-            print(f"Error flushing WAL: {e}")
+            logger.error(f"Error flushing WAL: {e}")
     
     def replay(self) -> List[Dict]:
         """Replay WAL entries (for recovery)."""
@@ -215,7 +218,7 @@ class WriteAheadLog:
                     if line.strip():
                         entries.append(json.loads(line))
         except Exception as e:
-            print(f"Error replaying WAL: {e}")
+            logger.error(f"Error replaying WAL: {e}")
         
         return entries
     
@@ -316,7 +319,7 @@ class ScalableJSONAdapter(DatabaseInterface):
                 data = json.load(f)
                 self._index = data
         except Exception as e:
-            print(f"Error loading index.json: {e}")
+            logger.error(f"Error loading index.json: {e}")
             self._index = {"last_id": 0, "documents": {}}
     
     def _save_index(self):
@@ -328,7 +331,7 @@ class ScalableJSONAdapter(DatabaseInterface):
                 json.dump(self._index, f, indent=2, ensure_ascii=False)
             temp_file.replace(self.index_file)
         except Exception as e:
-            print(f"Error saving index.json: {e}")
+            logger.error(f"Error saving index.json: {e}")
     
     def _load_document_from_disk(self, doc_id: str) -> Optional[Dict]:
         """Load a single document from disk."""
@@ -349,7 +352,7 @@ class ScalableJSONAdapter(DatabaseInterface):
                 self.cache.put(doc_id, doc)
                 return doc
         except Exception as e:
-            print(f"Error loading document {doc_id}: {e}")
+            logger.error(f"Error loading document {doc_id}: {e}")
             return None
     
     def _save_document_to_disk(self, doc_id: str, doc_data: Dict):
@@ -367,7 +370,7 @@ class ScalableJSONAdapter(DatabaseInterface):
             # Update cache
             self.cache.put(doc_id, doc_data)
         except Exception as e:
-            print(f"Error saving document {doc_id}: {e}")
+            logger.error(f"Error saving document {doc_id}: {e}")
             raise
     
     def _load_folders(self):
@@ -382,7 +385,7 @@ class ScalableJSONAdapter(DatabaseInterface):
                 with open(folder_file, 'r', encoding='utf-8') as f:
                     self._folders[folder_path] = json.load(f)
             except Exception as e:
-                print(f"Error loading folder {folder_file}: {e}")
+                logger.error(f"Error loading folder {folder_file}: {e}")
     
     def _save_folder(self, folder_path: str, folder_data: Dict):
         """Save a folder to disk."""
@@ -394,7 +397,7 @@ class ScalableJSONAdapter(DatabaseInterface):
             with open(folder_file, 'w', encoding='utf-8') as f:
                 json.dump(folder_data, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            print(f"Error saving folder {folder_path}: {e}")
+            logger.error(f"Error saving folder {folder_path}: {e}")
             raise
     
     def _rebuild_indexes(self):
@@ -431,7 +434,7 @@ class ScalableJSONAdapter(DatabaseInterface):
         # Replay WAL if needed (recovery)
         wal_entries = self.wal.replay()
         if wal_entries:
-            print(f"Replaying {len(wal_entries)} WAL entries for recovery...")
+            logger.info(f"Replaying {len(wal_entries)} WAL entries for recovery...")
             # Replay logic would go here if needed
     
     async def close(self):
@@ -793,7 +796,7 @@ class ScalableJSONAdapter(DatabaseInterface):
     
     async def _compact(self):
         """Background compaction process."""
-        print(f"Starting compaction (write count: {self.write_count})...")
+        logger.info(f"Starting compaction (write count: {self.write_count})...")
         
         # Flush WAL
         self.wal.flush()
@@ -817,7 +820,7 @@ class ScalableJSONAdapter(DatabaseInterface):
         # Update compaction counter
         self.last_compaction = self.write_count
         
-        print(f"Compaction complete. Verified {verified_count} documents.")
+        logger.info(f"Compaction complete. Verified {verified_count} documents.")
     
     def get_stats(self) -> Dict:
         """Get statistics about the database."""

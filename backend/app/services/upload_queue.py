@@ -9,6 +9,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 from datetime import datetime
 import traceback
+from ..core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class UploadStatus(Enum):
     """Upload task status."""
@@ -174,27 +177,33 @@ class UploadQueueManager:
         self.tasks[task_id] = task
         await self.task_queue.put(task)
         self.stats["total_tasks"] += 1
+        logger.debug(f"Added task {task_id} to queue: {filename} (queue size: {self.task_queue.qsize()})")
         return task
     
     async def start_workers(self, processor: Callable):
         """Start worker pool with dynamic scaling."""
         if self.is_running:
+            logger.warning("Workers already running, skipping start")
             return
         
+        logger.info(f"Starting worker pool with {self.min_workers} initial workers")
         self.is_running = True
         
         # Start initial workers
         initial_workers = self.min_workers
-        for _ in range(initial_workers):
+        for i in range(initial_workers):
             worker = asyncio.create_task(self._worker(processor))
             self.workers.append(worker)
             self.worker_count += 1
+            logger.debug(f"Started worker {i+1}/{initial_workers}")
         
         # Start dynamic scaling task
         asyncio.create_task(self._scale_workers(processor))
+        logger.info(f"Worker pool started with {self.worker_count} workers")
     
     async def _scale_workers(self, processor: Callable):
         """Dynamically scale workers based on queue size."""
+        logger.debug("Worker scaling task started")
         while self.is_running:
             await asyncio.sleep(2)  # Check every 2 seconds
             
@@ -203,16 +212,24 @@ class UploadQueueManager:
             
             # Add workers if needed
             max_allowed = self.max_workers if self.max_workers is not None else 1000
+            workers_added = 0
             while self.worker_count < optimal_workers and self.worker_count < max_allowed:
                 worker = asyncio.create_task(self._worker(processor))
                 self.workers.append(worker)
                 self.worker_count += 1
+                workers_added += 1
+            
+            if workers_added > 0:
+                logger.info(f"Scaled up: Added {workers_added} workers (total: {self.worker_count}, queue: {queue_size})")
             
             # Remove excess workers (gracefully, let them finish current task)
             # We don't kill workers immediately, they'll finish naturally
     
     async def _worker(self, processor: Callable):
         """Worker coroutine that processes tasks from queue."""
+        worker_id = id(asyncio.current_task())
+        logger.debug(f"Worker {worker_id} started")
+        
         while self.is_running:
             try:
                 # Get task with timeout to allow checking is_running
@@ -221,9 +238,11 @@ class UploadQueueManager:
                 except asyncio.TimeoutError:
                     # If queue is empty and we have too many workers, exit
                     if self.task_queue.qsize() == 0 and self.worker_count > self.min_workers:
+                        logger.debug(f"Worker {worker_id} exiting (queue empty, excess workers)")
                         break
                     continue
                 
+                logger.debug(f"Worker {worker_id} processing task {task.task_id}: {task.filename}")
                 # Process task
                 await self._process_task(task, processor)
                 
@@ -231,15 +250,17 @@ class UploadQueueManager:
                 self.task_queue.task_done()
                 
             except Exception as e:
-                print(f"Worker error: {e}")
+                logger.error(f"Worker {worker_id} error: {e}", exc_info=True)
                 await asyncio.sleep(1)
         
         # Worker is done
         self.worker_count -= 1
+        logger.debug(f"Worker {worker_id} stopped (remaining workers: {self.worker_count})")
     
     async def _process_task(self, task: UploadTask, processor: Callable):
         """Process a single upload task with retry logic."""
         task.mark_processing()
+        logger.debug(f"Processing task {task.task_id}: {task.filename} (attempt {task.retry_count + 1})")
         
         while True:
             try:
@@ -250,10 +271,12 @@ class UploadQueueManager:
                 if result.get("status") == "success":
                     task.mark_success(result)
                     self.stats["completed"] += 1
+                    logger.info(f"Task {task.task_id} completed successfully: {task.filename}")
                     break
                 elif result.get("status") == "duplicate":
                     task.mark_duplicate(result.get("existing_document", {}))
                     self.stats["duplicates"] += 1
+                    logger.info(f"Task {task.task_id} skipped (duplicate): {task.filename}")
                     break
                 elif result.get("status") == "error":
                     # Task failed
@@ -263,18 +286,21 @@ class UploadQueueManager:
                         task.mark_retrying()
                         self.stats["retries"] += 1
                         delay = self.retry_delays[min(task.retry_count - 1, len(self.retry_delays) - 1)]
+                        logger.warning(f"Task {task.task_id} failed, retrying in {delay}s (attempt {task.retry_count + 1}/{task.max_retries}): {error_msg}")
                         await asyncio.sleep(delay)
                         continue  # Retry
                     else:
                         # Max retries reached
                         task.mark_failed(error_msg)
                         self.stats["failed"] += 1
+                        logger.error(f"Task {task.task_id} failed after {task.retry_count} retries: {task.filename} - {error_msg}")
                         break
                 else:
                     # Unknown status
                     error_msg = f"Unknown status: {result.get('status')}"
                     task.mark_failed(error_msg)
                     self.stats["failed"] += 1
+                    logger.error(f"Task {task.task_id} failed with unknown status: {error_msg}")
                     break
                         
             except Exception as e:
@@ -283,13 +309,13 @@ class UploadQueueManager:
                     task.mark_retrying()
                     self.stats["retries"] += 1
                     delay = self.retry_delays[min(task.retry_count - 1, len(self.retry_delays) - 1)]
+                    logger.warning(f"Task {task.task_id} exception, retrying in {delay}s: {error_msg}", exc_info=True)
                     await asyncio.sleep(delay)
                     continue  # Retry
                 else:
                     task.mark_failed(error_msg)
                     self.stats["failed"] += 1
-                    print(f"Task {task.task_id} failed after {task.retry_count} retries: {error_msg}")
-                    traceback.print_exc()
+                    logger.error(f"Task {task.task_id} failed after {task.retry_count} retries: {task.filename} - {error_msg}", exc_info=True)
                     break
     
     async def wait_for_completion(self, timeout: Optional[float] = None) -> Dict:
@@ -341,10 +367,12 @@ class UploadQueueManager:
     
     async def stop(self):
         """Stop all workers and clean up."""
+        logger.info(f"Stopping worker pool ({self.worker_count} workers, {self.task_queue.qsize()} tasks in queue)")
         self.is_running = False
         
         # Wait for queue to empty
         await self.task_queue.join()
+        logger.debug("Queue emptied, waiting for workers to finish")
         
         # Cancel all workers
         for worker in self.workers:
@@ -355,4 +383,5 @@ class UploadQueueManager:
         
         self.workers.clear()
         self.worker_count = 0
+        logger.info("Worker pool stopped")
 

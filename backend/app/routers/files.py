@@ -7,6 +7,9 @@ from fastapi.responses import FileResponse, Response
 
 from .dependencies import get_file_service
 from ..core.config import STORAGE_TYPE
+from ..core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 

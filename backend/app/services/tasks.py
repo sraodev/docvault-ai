@@ -48,6 +48,9 @@ def process_document_task(
         
         # Process document
         import asyncio
+from ..core.logging_config import get_logger
+
+logger = get_logger(__name__)
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         loop.run_until_complete(

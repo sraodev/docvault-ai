@@ -10,6 +10,9 @@ from fastapi import UploadFile
 from urllib.parse import quote
 
 from .base import FileStorageInterface
+from ...core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class LocalFileStorage(FileStorageInterface):
     """

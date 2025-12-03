@@ -9,6 +9,9 @@ from typing import Optional
 from .base import FileStorageInterface
 from .local_storage import LocalFileStorage
 from .s3_storage import S3FileStorage
+from ...core.logging_config import get_logger
+
+logger = get_logger(__name__)
 # Supabase import is conditional - only imported when needed
 
 class FileStorageFactory:

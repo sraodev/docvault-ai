@@ -5,11 +5,15 @@ Extracted from documents router to follow Single Responsibility Principle.
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 from datetime import datetime
+from fastapi import HTTPException, status
 
 from .ai_service import AIService
 from .file_service import FileService
 from ..utils.tag_extractor import extract_tags_from_text
 from ..core.config import UPLOAD_DIR
+from ..core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class DocumentProcessingService:
@@ -46,7 +50,40 @@ class DocumentProcessingService:
             await self.db_service.update_document(doc_id, {"status": "processing"})
             
             # 1. Extract Text
-            text_content = await self.file_service.extract_text(file_path)
+            file_ext = file_path.suffix.lower()
+            filename = file_path.name
+            logger.info(f"Extracting text from {filename} (format: {file_ext})")
+            
+            try:
+                text_content = await self.file_service.extract_text(file_path)
+            except HTTPException as http_err:
+                # Re-raise HTTP exceptions (they already have proper error messages)
+                error_detail = http_err.detail
+                logger.error(
+                    f"Text extraction failed for {filename} ({file_ext}): {error_detail}",
+                    exc_info=False
+                )
+                # Mark document as failed with error message
+                await self.db_service.update_document(doc_id, {
+                    "status": "failed",
+                    "error": error_detail
+                })
+                raise
+            except Exception as extract_err:
+                error_msg = str(extract_err)
+                logger.error(
+                    f"Unexpected error extracting text from {filename} ({file_ext}): {error_msg}",
+                    exc_info=True
+                )
+                # Mark document as failed
+                await self.db_service.update_document(doc_id, {
+                    "status": "failed",
+                    "error": f"Error extracting text: {error_msg}"
+                })
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Error extracting text from file '{filename}': {error_msg}"
+                )
             
             # 2. Generate Summary and Markdown (handle AI service errors gracefully)
             summary = None
@@ -56,7 +93,7 @@ class DocumentProcessingService:
                 summary = self.ai_service.generate_summary(text_content)
                 markdown_content = self.ai_service.generate_markdown(text_content)
             except Exception as ai_error:
-                print(f"AI Service Error for {doc_id}: {ai_error}")
+                logger.error(f"AI Service Error for {doc_id}: {ai_error}")
             
             # 3. Generate Tags using AI (with summary for better context if available)
             tags = await self._generate_tags(text_content, summary, doc_id)
@@ -72,7 +109,7 @@ class DocumentProcessingService:
             
             # Check if AI processing failed (returns None)
             if summary is None or markdown_content is None:
-                print(f"AI Service unavailable for {doc_id} - marking as ready")
+                logger.info(f"AI Service unavailable for {doc_id} - marking as ready")
                 
                 update_data = {
                     "status": "ready",
@@ -106,12 +143,12 @@ class DocumentProcessingService:
             current_doc = await self.db_service.get_document(doc_id)
             existing_folder_before = current_doc.get("folder") if current_doc else None
             if existing_folder_before:
-                print(f"Document {doc_id} already in folder '{existing_folder_before}', preserving folder assignment")
+                logger.info(f"Document {doc_id} already in folder '{existing_folder_before}', preserving folder assignment")
             
             await self.db_service.update_document(doc_id, update_data)
             
         except Exception as e:
-            print(f"Fatal error processing {doc_id}: {e}")
+            logger.error(f"Fatal error processing {doc_id}: {e}")
             # Don't mark as failed if it's just AI service unavailable - keep as ready
             error_str = str(e).lower()
             if "insufficient credits" in error_str or "api key" in error_str or "402" in error_str:
@@ -141,13 +178,13 @@ class DocumentProcessingService:
             # Try AI-generated tags first (preferred method)
             tags = self.ai_service.generate_tags(text_content, summary)
             if tags and len(tags) > 0:
-                print(f"AI-generated {len(tags)} tags for {doc_id}")
+                logger.info(f"AI-generated {len(tags)} tags for {doc_id}")
             else:
                 # Fallback to rule-based extraction if AI returns empty
-                print(f"AI tags empty for {doc_id}, falling back to rule-based extraction")
+                logger.info(f"AI tags empty for {doc_id}, falling back to rule-based extraction")
                 tags = extract_tags_from_text(text_content, summary)
         except Exception as tag_error:
-            print(f"AI tag generation failed for {doc_id}: {tag_error}, using rule-based extraction")
+            logger.error(f"AI tag generation failed for {doc_id}: {tag_error}, using rule-based extraction")
             # Fallback to rule-based tag extraction
             tags = extract_tags_from_text(text_content, summary)
         
@@ -192,11 +229,11 @@ class DocumentProcessingService:
             
             embedding = self.ai_service.generate_embedding(searchable_text)
             if embedding and len(embedding) > 0:
-                print(f"Generated embedding for {doc_id} (dimension: {len(embedding)})")
+                logger.info(f"Generated embedding for {doc_id} (dimension: {len(embedding)})")
             else:
-                print(f"Failed to generate embedding for {doc_id}")
+                logger.error(f"Failed to generate embedding for {doc_id}")
         except Exception as embedding_error:
-            print(f"Embedding generation failed for {doc_id}: {embedding_error}")
+            logger.error(f"Embedding generation failed for {doc_id}: {embedding_error}")
         
         return embedding
     

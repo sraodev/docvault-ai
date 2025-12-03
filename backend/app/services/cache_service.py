@@ -14,6 +14,9 @@ from typing import Optional, Any, List, Dict
 from datetime import timedelta
 import aioredis
 from ..core.config import REDIS_URL, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, REDIS_DB
+from ..core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class CacheService:
@@ -75,7 +78,7 @@ class CacheService:
                 return json.loads(value)
             return None
         except Exception as e:
-            print(f"Cache get error for key '{key}': {e}")
+            logger.error(f"Cache get error for key '{key}': {e}")
             return None
     
     async def set(
@@ -104,7 +107,7 @@ class CacheService:
             await self._redis.setex(key, ttl, serialized)
             return True
         except Exception as e:
-            print(f"Cache set error for key '{key}': {e}")
+            logger.error(f"Cache set error for key '{key}': {e}")
             return False
     
     async def delete(self, key: str) -> bool:
@@ -114,7 +117,7 @@ class CacheService:
             await self._redis.delete(key)
             return True
         except Exception as e:
-            print(f"Cache delete error for key '{key}': {e}")
+            logger.error(f"Cache delete error for key '{key}': {e}")
             return False
     
     async def delete_pattern(self, pattern: str) -> int:
@@ -137,7 +140,7 @@ class CacheService:
                 return await self._redis.delete(*keys)
             return 0
         except Exception as e:
-            print(f"Cache delete_pattern error for pattern '{pattern}': {e}")
+            logger.error(f"Cache delete_pattern error for pattern '{pattern}': {e}")
             return 0
     
     async def exists(self, key: str) -> bool:
@@ -146,7 +149,7 @@ class CacheService:
         try:
             return await self._redis.exists(key) > 0
         except Exception as e:
-            print(f"Cache exists error for key '{key}': {e}")
+            logger.error(f"Cache exists error for key '{key}': {e}")
             return False
     
     async def increment(self, key: str, amount: int = 1) -> int:
@@ -155,7 +158,7 @@ class CacheService:
         try:
             return await self._redis.incrby(key, amount)
         except Exception as e:
-            print(f"Cache increment error for key '{key}': {e}")
+            logger.error(f"Cache increment error for key '{key}': {e}")
             return 0
     
     async def get_many(self, keys: List[str]) -> Dict[str, Any]:
@@ -177,7 +180,7 @@ class CacheService:
                     result[key] = json.loads(value)
             return result
         except Exception as e:
-            print(f"Cache get_many error: {e}")
+            logger.error(f"Cache get_many error: {e}")
             return {}
     
     async def set_many(
@@ -207,7 +210,7 @@ class CacheService:
             await pipe.execute()
             return True
         except Exception as e:
-            print(f"Cache set_many error: {e}")
+            logger.error(f"Cache set_many error: {e}")
             return False
 
 

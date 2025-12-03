@@ -9,6 +9,9 @@ from .interfaces import IFolderService
 from ..domain.entities import Folder
 from ..domain.value_objects import FolderPath
 from ..repositories.interfaces import IFolderRepository
+from ..core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class FolderService(IFolderService):
     """

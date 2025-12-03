@@ -22,6 +22,9 @@ from typing import Optional, Dict, Any, List
 
 from .dependencies import get_search_service, get_db_service
 from ..utils.document_utils import ensure_document_fields
+from ..core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # Create router instance
 router = APIRouter()

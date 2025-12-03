@@ -6,6 +6,9 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Optional, BinaryIO
 from fastapi import UploadFile
+from ...core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class FileStorageInterface(ABC):
     """

@@ -7,6 +7,7 @@ import { ProgressBar } from './ProgressBar'
 import { formatFileSize } from '../utils/formatSize'
 import { extractFilename } from '../utils/filename'
 import { api } from '../services/api'
+import { logger } from '../utils/logger'
 
 function cn(...inputs: (string | undefined | null | false)[]) {
     return twMerge(clsx(inputs))
@@ -223,12 +224,12 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                             const doc = await api.getDocument(result.document_id)
                             fullDocs.push(doc)
                         } catch (err) {
-                            console.error(`Failed to fetch document ${result.document_id}:`, err)
+                            logger.error(`Failed to fetch document ${result.document_id}`, "DriveView", err as Error, { documentId: result.document_id })
                         }
                     }
                     setSearchResults(fullDocs)
                 } catch (err) {
-                    console.error("Semantic search failed, falling back to text search:", err)
+                    logger.warn("Semantic search failed, falling back to text search", "DriveView", { query: searchQuery, error: err })
                     // Fallback to simple text search
                     const filtered = documents.filter(doc =>
                         extractFilename(doc.filename).toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -359,23 +360,23 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
         // Check if we have directory entries (folder drag & drop from file system)
         // This uses the File System Access API to detect folder structures
         const items = Array.from(e.dataTransfer.items)
-        console.log(`[Drag & Drop] Checking ${items.length} items for folder structure`)
-        
+        logger.debug(`[Drag & Drop] Checking ${items.length} items for folder structure`, "DriveView", { itemCount: items.length })
+
         let hasDirectories = items.some(item => {
             try {
                 const entry = item.webkitGetAsEntry()
                 const isDir = entry && entry.isDirectory
                 if (isDir) {
-                    console.log(`[Drag & Drop] Found directory: ${entry.name}`)
+                    logger.debug(`[Drag & Drop] Found directory: ${entry.name}`, "DriveView")
                 }
                 return isDir
             } catch (err) {
-                console.warn(`[Drag & Drop] Error checking entry:`, err)
+                logger.warn(`[Drag & Drop] Error checking entry`, "DriveView", err as Error)
                 return false
             }
         })
-        
-        console.log(`[Drag & Drop] Has directories: ${hasDirectories}`)
+
+        logger.debug(`[Drag & Drop] Has directories: ${hasDirectories}`, "DriveView")
 
         if (hasDirectories) {
             // Handle folder drag & drop using File System Access API
@@ -399,13 +400,13 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                             filePaths.set(file, basePath)
                         }
                     } catch (err) {
-                        console.error(`Error processing file entry: ${err}`)
+                        logger.error(`Error processing file entry`, "DriveView", err as Error, { entryName: entry.name })
                     }
                 } else if (entry.isDirectory) {
                     // Recursively process directory contents
                     try {
                         const reader = entry.createReader()
-                        
+
                         // Read all entries (may require multiple reads)
                         let entries: any[] = []
                         let hasMore = true
@@ -428,7 +429,7 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                             await processEntry(subEntry, newBasePath)
                         }
                     } catch (err) {
-                        console.error(`Error processing directory entry: ${err}`)
+                        logger.error(`Error processing directory entry`, "DriveView", err as Error, { entryName: entry.name })
                     }
                 }
             }
@@ -441,52 +442,53 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                         if (entry) {
                             await processEntry(entry)
                         } else {
-                            console.warn(`[Drag & Drop] Entry is null for item: ${item.type}`)
+                            logger.warn(`[Drag & Drop] Entry is null for item: ${item.type}`, "DriveView")
                         }
                     } catch (entryError) {
-                        console.error(`[Drag & Drop] Error getting entry:`, entryError)
+                        logger.error(`[Drag & Drop] Error getting entry`, "DriveView", entryError as Error)
                         // Fallback: if webkitGetAsEntry fails, try to get files directly
                         if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                            console.log(`[Drag & Drop] Falling back to direct file access`)
+                            logger.debug(`[Drag & Drop] Falling back to direct file access`, "DriveView")
                             // This will be handled by the else branch below
                             break
                         }
                     }
                 }
             } catch (processError) {
-                console.error(`[Drag & Drop] Error processing entries:`, processError)
+                logger.error(`[Drag & Drop] Error processing entries`, "DriveView", processError as Error)
                 // Fallback to regular file handling
                 if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                    console.log(`[Drag & Drop] Falling back to regular file upload`)
+                    logger.debug(`[Drag & Drop] Falling back to regular file upload`, "DriveView")
                     // Set hasDirectories to false to trigger fallback handling below
                     hasDirectories = false
                 } else {
                     // No files available, show error
-                    setUploadError("Folder drag-and-drop is not supported in this browser. Please use the 'Folder Upload' button in the sidebar instead.")
+                    logger.warn("Folder drag-and-drop not supported in browser", "DriveView", undefined, { hasFiles: !!e.dataTransfer.files })
+                    // Note: setUploadError is not available in this component, error is handled by parent
                     return
                 }
             }
-            
+
             // If no files were collected, fall back to regular file handling
             if (allFiles.length === 0 && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                console.log(`[Drag & Drop] No files collected from directory entries, falling back to regular files`)
+                logger.debug(`[Drag & Drop] No files collected from directory entries, falling back to regular files`, "DriveView")
                 hasDirectories = false
             }
 
             if (allFiles.length > 0) {
-                console.log(`[Drag & Drop] Processing ${allFiles.length} files from folder structure`)
-                
+                logger.info(`[Drag & Drop] Processing ${allFiles.length} files from folder structure`, "DriveView", { fileCount: allFiles.length })
+
                 // Create FileList from collected files
                 // DataTransfer API allows us to create a FileList programmatically
                 const dataTransfer = new DataTransfer()
-                
+
                 // Create a map from filename to folder path for reliable lookup
                 const filenameToFolderPath = new Map<string, string>()
                 allFiles.forEach(file => {
                     const folderPath = filePaths.get(file)
                     if (folderPath) {
                         filenameToFolderPath.set(file.name, folderPath)
-                        console.log(`[Drag & Drop] File: ${file.name} -> Folder: ${folderPath}`)
+                        logger.debug(`[Drag & Drop] File: ${file.name} -> Folder: ${folderPath}`, "DriveView")
                     }
                     dataTransfer.items.add(file)
                 })
@@ -499,36 +501,36 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                 const getFolderPath = (file: File): string | undefined => {
                     // Try to get folder path from filename lookup first (more reliable)
                     let folderPath = filenameToFolderPath.get(file.name)
-                    
+
                     // Fallback to direct File object lookup
                     if (!folderPath) {
                         folderPath = filePaths.get(file)
                     }
-                    
+
                     if (folderPath) {
                         // If we're currently viewing a folder, prepend it to maintain structure
                         const finalPath = currentFolder ? `${currentFolder}/${folderPath}` : folderPath
-                        console.log(`[Drag & Drop] Resolved folder for ${file.name}: ${finalPath}`)
+                        logger.debug(`[Drag & Drop] Resolved folder for ${file.name}: ${finalPath}`, "DriveView")
                         return finalPath
                     }
-                    
-                    console.log(`[Drag & Drop] No folder path found for ${file.name}, using current folder: ${currentFolder || 'root'}`)
+
+                    logger.debug(`[Drag & Drop] No folder path found for ${file.name}, using current folder: ${currentFolder || 'root'}`, "DriveView")
                     return currentFolder || undefined
                 }
 
-                console.log(`[Drag & Drop] Starting upload of ${allFiles.length} files`)
+                logger.info(`[Drag & Drop] Starting upload of ${allFiles.length} files`, "DriveView", { fileCount: allFiles.length })
                 await onUpload(dataTransfer.files, getFolderPath)
             } else {
-                console.warn('[Drag & Drop] No files found in dropped folder')
+                logger.warn('[Drag & Drop] No files found in dropped folder', "DriveView")
             }
         }
-        
+
         // Fallback: Handle as regular files if folder detection failed or not supported
         if (!hasDirectories && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
             // Regular file upload or files with webkitRelativePath (from webkitdirectory input)
             // This handles files dropped from folder input elements (not direct folder drag)
             const files = Array.from(e.dataTransfer.files)
-            console.log(`[Drag & Drop] Handling as regular files (${files.length} files)`)
+            logger.debug(`[Drag & Drop] Handling as regular files (${files.length} files)`, "DriveView", { fileCount: files.length })
 
             // Check for ZIP files
             const zipFiles = files.filter(file => {
@@ -612,7 +614,7 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                 setCurrentFolder(parentPath || null)
             }
         } catch (err: any) {
-            console.error("Delete folder failed", err)
+            logger.error("Delete folder failed", "DriveView", err as Error, { folderPath })
             const errorMsg = err.response?.data?.detail || err.message || "Failed to delete folder"
             alert(errorMsg)
         }
@@ -930,10 +932,10 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                                     onClick={() => onSelect(doc)}
                                     className={cn(
                                         "relative group cursor-pointer rounded-lg border transition-all duration-200 aspect-square flex flex-col bg-white",
-                                        isSelected ? "border-blue-500 bg-blue-50 shadow-md" : 
-                                        doc.status === 'processing' ? "border-orange-300 bg-orange-50 hover:border-orange-400 hover:shadow-md" :
-                                        doc.status === 'uploading' ? "border-red-300 bg-red-50 hover:border-red-400 hover:shadow-md" :
-                                        "border-slate-200 hover:border-slate-300 hover:shadow-md",
+                                        isSelected ? "border-blue-500 bg-blue-50 shadow-md" :
+                                            doc.status === 'processing' ? "border-orange-300 bg-orange-50 hover:border-orange-400 hover:shadow-md" :
+                                                doc.status === 'uploading' ? "border-red-300 bg-red-50 hover:border-red-400 hover:shadow-md" :
+                                                    "border-slate-200 hover:border-slate-300 hover:shadow-md",
                                         statusColor || fileTypeColor || ""
                                     )}
                                 >
@@ -959,7 +961,7 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                                         <p className="text-xs font-medium text-slate-700 text-center line-clamp-2 px-1 break-words w-full min-w-0 max-w-full">
                                             {extractFilename(doc.filename)}
                                         </p>
-                                        
+
                                         {/* Last Modified Date */}
                                         {(doc.modified_date || doc.upload_date) && (
                                             <p className="mt-1 text-[9px] text-slate-400">
@@ -968,41 +970,41 @@ export function DriveView({ documents, selectedDocId, onSelect, onDelete, onUplo
                                                     const now = new Date()
                                                     const diffTime = Math.abs(now.getTime() - date.getTime())
                                                     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-                                                    
+
                                                     // Show relative date for recent files, absolute for older
                                                     if (diffDays <= 7) {
                                                         if (diffDays === 0) return 'Today'
                                                         if (diffDays === 1) return 'Yesterday'
                                                         return `${diffDays} days ago`
                                                     }
-                                                    
+
                                                     // Show formatted date for older files
-                                                    return date.toLocaleDateString('en-US', { 
-                                                        month: 'short', 
+                                                    return date.toLocaleDateString('en-US', {
+                                                        month: 'short',
                                                         day: 'numeric',
                                                         year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
                                                     })
                                                 })()}
                                             </p>
                                         )}
-                                        
+
                                         {doc.size && (
                                             <p className="mt-0.5 text-[9px] text-slate-500">
                                                 {formatFileSize(doc.size)}
                                             </p>
                                         )}
-                                        
+
                                         {/* Category Tag - Bottom Right */}
                                         {doc.document_category && doc.status === 'completed' && (
                                             <div className="absolute bottom-2 right-2">
                                                 <span className={cn(
                                                     "inline-block px-1.5 py-0.5 rounded text-[8px] font-medium shadow-sm",
                                                     doc.document_category.toLowerCase().includes('invoice') ? "bg-blue-100 text-blue-700" :
-                                                    doc.document_category.toLowerCase().includes('agreement') || doc.document_category.toLowerCase().includes('contract') ? "bg-purple-100 text-purple-700" :
-                                                    doc.document_category.toLowerCase().includes('resume') ? "bg-green-100 text-green-700" :
-                                                    doc.document_category.toLowerCase().includes('medical') ? "bg-red-100 text-red-700" :
-                                                    doc.document_category.toLowerCase().includes('code') ? "bg-orange-100 text-orange-700" :
-                                                    "bg-slate-100 text-slate-700"
+                                                        doc.document_category.toLowerCase().includes('agreement') || doc.document_category.toLowerCase().includes('contract') ? "bg-purple-100 text-purple-700" :
+                                                            doc.document_category.toLowerCase().includes('resume') ? "bg-green-100 text-green-700" :
+                                                                doc.document_category.toLowerCase().includes('medical') ? "bg-red-100 text-red-700" :
+                                                                    doc.document_category.toLowerCase().includes('code') ? "bg-orange-100 text-orange-700" :
+                                                                        "bg-slate-100 text-slate-700"
                                                 )}>
                                                     {doc.document_category}
                                                 </span>

@@ -16,12 +16,12 @@
 | **Markdown** | `.md` | Built-in | ✅ **Full Support** | UTF-8 decoding, AI processing enabled |
 | **Word (DOCX)** | `.docx` | `python-docx` | ✅ **Full Support** | Text extraction from paragraphs and tables, AI processing enabled |
 | **Word (DOC)** | `.doc` | `textract` (optional) | ✅ **Full Support** | Requires textract + antiword/LibreOffice, AI processing enabled |
+| **Rich Text Format** | `.rtf` | `striprtf` | ✅ **Full Support** | Text extraction works, AI processing enabled |
 
 ### ⚠️ **Partially Supported** (Stored but Not Extracted)
 
 | Format | Extension | Status | Issue |
 |--------|-----------|--------|-------|
-| **Rich Text** | `.rtf` | ⚠️ **Storage Only** | Files are saved but text extraction NOT implemented |
 | **OpenDocument** | `.odt` | ⚠️ **Storage Only** | Files are saved but text extraction NOT implemented |
 
 ### ❌ **Not Supported** (No Processing)
@@ -79,12 +79,19 @@ async def extract_text(self, file_path: Path) -> str:
     elif file_ext in [".txt", ".md"]:
         # Plain text files
         return file_bytes.decode('utf-8', errors='ignore')
+    
+    elif file_ext == ".rtf":
+        # RTF extraction using striprtf
+        rtf_content = file_bytes.decode('utf-8', errors='ignore')
+        text_content = rtf_to_text(rtf_content)
+        return text_content
 ```
 
 **Current Support**:
 - ✅ PDF files - Full text extraction
 - ✅ DOCX files - Full text extraction (paragraphs + tables)
 - ✅ DOC files - Full text extraction (requires textract)
+- ✅ RTF files - Full text extraction (requires striprtf)
 - ✅ TXT/MD files - UTF-8 decoding
 - ❌ Binary files (images, Excel, etc.) - Not supported
 - ❌ No OCR for images
@@ -108,12 +115,15 @@ supported_extensions = {'.pdf', '.txt', '.md', '.docx', '.doc', '.rtf', '.odt'}
 - PDF files → Text extracted → AI summary/markdown/tags generated
 - TXT files → Text extracted → AI summary/markdown/tags generated
 - MD files → Text extracted → AI summary/markdown/tags generated
+- DOCX files → Text extracted → AI summary/markdown/tags generated
+- DOC files → Text extracted → AI summary/markdown/tags generated (requires textract)
+- RTF files → Text extracted → AI summary/markdown/tags generated (requires striprtf)
 
 ### ❌ **Doesn't Work** (No AI Processing)
-- DOCX files → **No text extraction** → AI processing fails or processes empty text
 - Images → **No OCR** → AI processing fails or processes empty text
 - Excel → **Not supported** → Cannot upload
 - PowerPoint → **Not supported** → Cannot upload
+- ODT files → **No text extraction** → AI processing fails or processes empty text
 
 ---
 
@@ -241,13 +251,13 @@ async def extract_text(self, file_path: Path) -> str:
    - Requires system dependencies (antiword or LibreOffice)
    - AI processing enabled when available
 
-### Phase 2: Additional Formats (Next Steps)
-1. **Add RTF support** (striprtf)
-   ```bash
-   pip install striprtf
-   ```
+3. ✅ **RTF support** (striprtf) - **IMPLEMENTED**
+   - Requires striprtf library
+   - Text extraction from RTF format
+   - AI processing enabled
 
-2. **Add ODT support** (odfpy or python-odf)
+### Phase 2: Additional Formats (Next Steps)
+1. **Add ODT support** (odfpy or python-odf)
    ```bash
    pip install odfpy
    ```
@@ -312,12 +322,17 @@ curl -X POST http://localhost:8000/upload \
   -F "file=@document.md"
 ```
 
-**Stored but No AI Processing**:
+**Now Works**:
 ```bash
-# DOCX (stored but text not extracted)
+# DOCX (text extraction enabled)
 curl -X POST http://localhost:8000/upload \
   -F "file=@document.docx"
-# Result: File saved, but AI processing fails (empty text)
+# Result: Text extracted, AI processing enabled
+
+# RTF (text extraction enabled)
+curl -X POST http://localhost:8000/upload \
+  -F "file=@document.rtf"
+# Result: Text extracted, AI processing enabled
 ```
 
 **Not Supported**:
@@ -333,22 +348,22 @@ curl -X POST http://localhost:8000/upload \
 ## Summary
 
 ### Current State (Updated)
-- ✅ **5 formats** fully supported (PDF, TXT, MD, DOCX, DOC)
-- ⚠️ **2 formats** stored but not extracted (RTF, ODT)
+- ✅ **6 formats** fully supported (PDF, TXT, MD, DOCX, DOC, RTF)
+- ⚠️ **1 format** stored but not extracted (ODT)
 - ❌ **Many formats** not supported (Excel, PowerPoint, Images, CSV, etc.)
 
 ### Recent Updates
 - ✅ **DOCX**: Full support implemented (python-docx)
 - ✅ **DOC**: Full support implemented (textract, optional)
+- ✅ **RTF**: Full support implemented (striprtf)
 
 ### Recommendation
-1. ✅ **COMPLETE**: DOCX and DOC support added
+1. ✅ **COMPLETE**: DOCX, DOC, and RTF support added
 2. **Short-term**: Add Excel and CSV support (structured data)
-3. **Medium-term**: Add RTF and ODT support
+3. **Medium-term**: Add ODT support
 4. **Long-term**: Add Image OCR and PowerPoint support
 
 ### Estimated Effort (Remaining)
-- **RTF**: 2-3 hours
 - **ODT**: 2-3 hours
 - **Excel/CSV**: 4-6 hours
 - **Image OCR**: 4-6 hours (plus Tesseract installation)

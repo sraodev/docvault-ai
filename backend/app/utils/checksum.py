@@ -4,6 +4,9 @@ Checksum utilities - Pure functions for file checksum calculation.
 import hashlib
 from pathlib import Path
 from ..domain.value_objects import FileChecksum
+from ..core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 def calculate_file_checksum(file_path: Path) -> str:
     """

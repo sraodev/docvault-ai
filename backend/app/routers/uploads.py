@@ -23,6 +23,9 @@ from pydantic import BaseModel
 from .dependencies import get_upload_service, get_document_processing_service
 from ..core.config import UPLOAD_DIR
 from pathlib import Path
+from ..core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # Create router instance
 router = APIRouter()

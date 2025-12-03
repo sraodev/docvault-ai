@@ -5,6 +5,7 @@ import { twMerge } from 'tailwind-merge'
 import { Document } from '../types'
 import { extractFilename } from '../utils/filename'
 import { api } from '../services/api'
+import { logger } from '../utils/logger'
 
 function cn(...inputs: (string | undefined | null | false)[]) {
     return twMerge(clsx(inputs))
@@ -65,7 +66,7 @@ export function Sidebar({
 
         if (!onCreateFolder) {
             alert("Folder creation is not available. Please refresh the page.")
-            console.error("onCreateFolder prop is not provided to Sidebar")
+            logger.error("onCreateFolder prop is not provided to Sidebar", "Sidebar")
             return
         }
 
@@ -156,7 +157,7 @@ export function Sidebar({
         // This ensures empty folders appear in the tree
         folders.forEach(folderPath => {
             if (!folderPath) return
-            
+
             const parts = folderPath.split('/').filter(p => p.trim() !== '')
             let current = root
 
@@ -312,13 +313,13 @@ export function Sidebar({
                         "flex-1 truncate transition-colors",
                         // Smart Folders styling
                         node.fullPath.startsWith("Smart Folders") ? (
-                            isActive 
-                                ? "text-sm font-semibold text-primary-700" 
+                            isActive
+                                ? "text-sm font-semibold text-primary-700"
                                 : "text-sm font-semibold text-indigo-600 group-hover:text-indigo-700"
                         ) : (
                             // Regular folders styling
-                            isActive 
-                                ? "text-sm font-medium text-primary-700 font-semibold" 
+                            isActive
+                                ? "text-sm font-medium text-primary-700 font-semibold"
                                 : "text-sm font-medium text-slate-600 group-hover:text-slate-900"
                         )
                     )} title={node.name}>
@@ -365,7 +366,7 @@ export function Sidebar({
                                                 await api.deleteFolder(node.fullPath)
                                             }
                                         } catch (err: any) {
-                                            console.error("Delete folder failed", err)
+                                            logger.error("Delete folder failed", "Sidebar", err as Error, { folderPath: node.fullPath })
                                             const errorMsg = err.response?.data?.detail || err.message || "Failed to delete folder"
                                             alert(errorMsg)
                                         }
@@ -668,7 +669,7 @@ export function Sidebar({
                                     try {
                                         await onCreateFolder(folderName.trim(), contextMenu.folderPath)
                                     } catch (err: any) {
-                                        console.error("Failed to create folder:", err)
+                                        logger.error("Failed to create folder", "Sidebar", err as Error, { folderName: folderName.trim(), parentFolder: contextMenu.folderPath })
                                     }
                                 }
                                 setContextMenu(null)
@@ -689,7 +690,7 @@ export function Sidebar({
                                         try {
                                             await onDeleteFolder(contextMenu.folderPath)
                                         } catch (err: any) {
-                                            console.error("Delete folder failed", err)
+                                            logger.error("Delete folder failed", "Sidebar", err as Error, { folderPath })
                                         }
                                     }
                                     setContextMenu(null)

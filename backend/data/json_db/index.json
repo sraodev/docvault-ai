@@ -1,75 +1,12 @@
 {
   "last_id": 0,
   "documents": {
-    "7ae20d2b-e5bc-4415-b9ee-e2f2ea1800ed": {
-      "filename": "TreeListRecursion.pdf",
-      "folder": "OutMark/Code",
-      "shard": "9000-9999",
-      "path": "documents/9000-9999/7ae20d2b-e5bc-4415-b9ee-e2f2ea1800ed.json",
-      "updated": "2025-12-01T14:04:53.888877"
-    },
-    "1bf2fe29-7f85-47c0-b9f7-645aac147415": {
-      "filename": ".DS_Store",
-      "folder": "OutMark/Sri",
-      "shard": "98000-98999",
-      "path": "documents/98000-98999/1bf2fe29-7f85-47c0-b9f7-645aac147415.json",
-      "updated": "2025-12-01T14:04:36.475877"
-    },
-    "1a4cb7bf-8c6e-4f42-978c-43805439f7a4": {
-      "filename": ".DS_Store",
-      "folder": "OutMark/Sri",
-      "shard": "13000-13999",
-      "path": "documents/13000-13999/1a4cb7bf-8c6e-4f42-978c-43805439f7a4.json",
-      "updated": "2025-12-01T14:04:30.337155"
-    },
-    "86e827c6-ab6f-4eb2-afb1-02662ada0a56": {
-      "filename": ".DS_Store",
-      "folder": "OutMark/Sri",
-      "shard": "83000-83999",
-      "path": "documents/83000-83999/86e827c6-ab6f-4eb2-afb1-02662ada0a56.json",
-      "updated": "2025-12-01T14:05:11.289075"
-    },
-    "c3b55fc7-12d9-4d8f-bfea-0eeec22da73b": {
-      "filename": "INV-KA-B1-154034981-102013581065-NOVEMBER-2025.pdf",
-      "folder": "OutMark/Sri",
-      "shard": "9000-9999",
-      "path": "documents/9000-9999/c3b55fc7-12d9-4d8f-bfea-0eeec22da73b.json",
-      "updated": "2025-12-01T14:05:05.927720"
-    },
-    "0213f73b-4013-4a47-9b28-28dcf964075e": {
+    "2cbb83b0-aa42-49d9-919b-c31cdd4b7499": {
       "filename": "AI Document Vault - Case Study.pdf",
-      "folder": "OutMark/DocX",
-      "shard": "19000-19999",
-      "path": "documents/19000-19999/0213f73b-4013-4a47-9b28-28dcf964075e.json",
-      "updated": "2025-12-01T14:05:58.253956"
-    },
-    "501d1c3e-6654-42d3-af30-ad39526e3459": {
-      "filename": "EssentialC.pdf",
-      "folder": "OutMark/Sri",
-      "shard": "39000-39999",
-      "path": "documents/39000-39999/501d1c3e-6654-42d3-af30-ad39526e3459.json",
-      "updated": "2025-12-01T14:05:48.254147"
-    },
-    "94f012a7-1b53-4f69-aa64-24415ab34181": {
-      "filename": "Resume_Srinivas_Rao_PrincipalEngineer.pdf",
-      "folder": "OutMark/Sri/Resume",
-      "shard": "84000-84999",
-      "path": "documents/84000-84999/94f012a7-1b53-4f69-aa64-24415ab34181.json",
-      "updated": "2025-12-01T14:05:28.009627"
-    },
-    "0e4c3384-e9d2-4388-b2ae-c33e7e175276": {
-      "filename": "practice_test_1.docx",
       "folder": null,
-      "shard": "47000-47999",
-      "path": "documents/47000-47999/0e4c3384-e9d2-4388-b2ae-c33e7e175276.json",
-      "updated": "2025-12-01T14:12:50.067453"
-    },
-    "e31479d5-fb7a-412a-b4d9-e43149f9f55f": {
-      "filename": "Sandisk NDA.pdf",
-      "folder": null,
-      "shard": "90000-90999",
-      "path": "documents/90000-90999/e31479d5-fb7a-412a-b4d9-e43149f9f55f.json",
-      "updated": "2025-12-01T14:19:31.073247"
+      "shard": "54000-54999",
+      "path": "documents/54000-54999/2cbb83b0-aa42-49d9-919b-c31cdd4b7499.json",
+      "updated": "2025-12-03T15:50:11.275115"
     }
   }
 }

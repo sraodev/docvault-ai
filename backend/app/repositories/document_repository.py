@@ -9,6 +9,9 @@ from .interfaces import IDocumentRepository
 from ..domain.entities import Document
 from ..domain.value_objects import FileChecksum, FolderPath
 from ..services.database.base import DatabaseInterface
+from ..core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class DocumentRepository(IDocumentRepository):
     """

@@ -10,6 +10,9 @@ from .base import DatabaseInterface
 from .memory_adapter import MemoryAdapter
 from .json_adapter import JSONAdapter
 from .scalable_json_adapter import ScalableJSONAdapter
+from ...core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class DatabaseFactory:
     """
@@ -79,7 +82,6 @@ class DatabaseFactory:
         """Create scalable JSON adapter (shard-based, scalable to 500K+ records)."""
         data_dir = kwargs.get("data_dir")
         if data_dir:
-            from pathlib import Path
             data_dir = Path(data_dir) if isinstance(data_dir, str) else data_dir
         return ScalableJSONAdapter(data_dir=data_dir)
     

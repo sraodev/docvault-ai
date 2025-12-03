@@ -14,8 +14,9 @@ A modern document management system that uses AI to automatically summarize and 
   - ✅ **PDF** - Full text extraction with `pypdf`
   - ✅ **DOCX** - Full text extraction (paragraphs and tables) with `python-docx`
   - ✅ **DOC** - Full text extraction with `textract` (requires antiword/LibreOffice)
+  - ✅ **RTF** - Full text extraction with `striprtf`
   - ✅ **TXT, MD** - Plain text files
-  - ⚠️ **RTF, ODT** - Storage only (text extraction coming soon)
+  - ⚠️ **ODT** - Storage only (text extraction coming soon)
 - **Upload Features**:
   - Circular progress indicators (small, elegant design)
   - Duplicate detection via SHA-256 checksum
@@ -637,7 +638,7 @@ npm install
 
 - `GET /files/{filename}` - Download or view an uploaded file
   - Returns: File content (text content for .md files)
-  - Supports: PDF, DOCX, DOC, TXT, MD, and other formats
+  - Supports: PDF, DOCX, DOC, RTF, TXT, MD, and other formats
 
 ### Upload Operations
 
@@ -834,7 +835,7 @@ Comprehensive documentation is available in the `docs/` directory:
 - **Storage**: Unlimited (depends on storage backend - Local, S3, or Supabase)
 - **Concurrent Processing**: Sequential AI processing using FastAPI BackgroundTasks
 - **Search**: Semantic search with embeddings (O(n) complexity), falls back to text search
-- **File Formats**: Full support for PDF, DOCX, DOC, TXT, MD with text extraction
+- **File Formats**: Full support for PDF, DOCX, DOC, RTF, TXT, MD with text extraction
 
 ### Scalability Recommendations
 - **AI Processing**: Consider Celery + Redis for production (see `docs/PRODUCTION_AI_PROCESSING_RECOMMENDATION.md`)

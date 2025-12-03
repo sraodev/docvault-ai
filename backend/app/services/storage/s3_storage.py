@@ -10,6 +10,9 @@ from botocore.exceptions import ClientError
 from botocore.config import Config
 
 from .base import FileStorageInterface
+from ...core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class S3FileStorage(FileStorageInterface):
     """

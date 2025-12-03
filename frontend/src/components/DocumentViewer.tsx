@@ -5,6 +5,7 @@ import { twMerge } from 'tailwind-merge'
 import { Document } from '../types'
 import { api } from '../services/api'
 import { extractFilename } from '../utils/filename'
+import { logger } from '../utils/logger'
 
 function cn(...inputs: (string | undefined | null | false)[]) {
     return twMerge(clsx(inputs))
@@ -42,7 +43,7 @@ export function DocumentViewer({ document, onClose, onNavigateToFolder, onDelete
                     clearInterval(pollInterval)
                 }
             } catch (error) {
-                console.error('Failed to fetch document update:', error)
+                logger.error('Failed to fetch document update', "DocumentViewer", error as Error, { documentId: currentDocument.id })
             }
         }, 2000) // Poll every 2 seconds when processing
 
@@ -55,7 +56,7 @@ export function DocumentViewer({ document, onClose, onNavigateToFolder, onDelete
             setIsProcessing(true)
             api.processDocument(currentDocument.id)
                 .catch((error) => {
-                    console.error('Failed to start AI processing:', error)
+                    logger.error('Failed to start AI processing', "DocumentViewer", error as Error, { documentId: currentDocument.id })
                     setIsProcessing(false)
                 })
         }
@@ -164,7 +165,7 @@ export function DocumentViewer({ document, onClose, onNavigateToFolder, onDelete
                                                     } catch (err: any) {
                                                         // Error is already handled by handleDeleteFolder (shows alert)
                                                         // Just log for debugging
-                                                        console.error("Delete folder failed in DocumentViewer", err)
+                                                        logger.error("Delete folder failed in DocumentViewer", "DocumentViewer", err as Error, { folderPath })
                                                     }
                                                 }}
                                                 className="p-1 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all shrink-0"

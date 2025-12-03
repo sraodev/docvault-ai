@@ -30,6 +30,9 @@ from .dependencies import (
 )
 from ..utils.document_utils import ensure_document_fields
 from ..core.config import UPLOAD_DIR
+from ..core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # Create router instance for this module
 router = APIRouter()
@@ -308,7 +311,7 @@ async def process_document(doc_id: str, background_tasks: BackgroundTasks):
                     doc_id,
                     {"file_path": str(found_path)}
                 )
-                print(f"Fixed file path for {doc_id}: {file_path_str} -> {found_path}")
+                logger.info(f"Fixed file path for {doc_id}: {file_path_str} -> {found_path}")
                 break
         
         if found_path:

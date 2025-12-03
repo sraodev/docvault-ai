@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { Document } from '../types'
 import { extractFilename } from '../utils/filename'
+import { logger } from '../utils/logger'
 
 const API_URL = 'http://localhost:8000'
 
@@ -10,7 +11,7 @@ export const api = {
             const res = await axios.get(`${API_URL}/documents`)
             return res.data
         } catch (error) {
-            console.error("Error fetching documents:", error)
+            logger.error("Error fetching documents", "API", error as Error, { endpoint: '/documents' })
             throw new Error("Failed to fetch documents. Please try again later.")
         }
     },
@@ -20,7 +21,7 @@ export const api = {
             const res = await axios.get(`${API_URL}/documents/${id}`)
             return res.data
         } catch (error) {
-            console.error(`Error fetching document ${id}:`, error)
+            logger.error(`Error fetching document ${id}`, "API", error as Error, { documentId: id, endpoint: `/documents/${id}` })
             throw new Error("Failed to load document details.")
         }
     },
@@ -30,7 +31,7 @@ export const api = {
             const res = await axios.post(`${API_URL}/documents/${id}/process`)
             return res.data
         } catch (error) {
-            console.error(`Error triggering AI processing for ${id}:`, error)
+            logger.error(`Error triggering AI processing for ${id}`, "API", error as Error, { documentId: id, endpoint: `/documents/${id}/process` })
             throw new Error("Failed to start AI processing.")
         }
     },
@@ -124,14 +125,25 @@ export const api = {
                             onProgress(docId, 100)
                         }
                     } catch (err) {
-                        console.error(`Error fetching document ${docId}:`, err)
+                        logger.error(`Error fetching document ${docId}`, "API", err as Error, { documentId: docId, endpoint: '/documents' })
                     }
                 }
 
                 // Handle errors and duplicates
                 if (response.data.errors.length > 0) {
-                    const errorMessages = response.data.errors.map(e => `${e.filename}: ${e.error}`).join(', ')
-                    console.warn('Some files failed to upload:', errorMessages)
+                    const errorMessages = response.data.errors.map(e => {
+                        // Format error messages for better UI display
+                        const error = e.error || 'Unknown error'
+                        if (error.includes('not supported')) {
+                            return `${e.filename}: Format not supported`
+                        } else if (error.includes('already exists') || error.includes('duplicate')) {
+                            return `${e.filename}: Already exists`
+                        }
+                        return `${e.filename}: ${error}`
+                    }).join('; ')
+                    logger.warn('Some files failed to upload', "API", { errors: response.data.errors, endpoint: '/upload/bulk' })
+                    // Throw error with formatted messages for UI display
+                    throw new Error(`Upload completed with errors: ${errorMessages}`)
                 }
 
                 return uploadedDocs
@@ -196,11 +208,32 @@ export const api = {
 
             return [doc]
         } catch (error: any) {
-            console.error("Error uploading files:", error)
-            if (error.response?.status === 409 && error.response?.data?.error === 'duplicate_file') {
-                throw new Error(`DUPLICATE: ${error.response.data.message}`)
+            logger.error("Error uploading files", "API", error, { endpoint: '/upload' })
+
+            // Extract detailed error message from response
+            let errorMessage = "Failed to upload files. Please check your connection and try again."
+
+            if (error.response?.data?.detail) {
+                errorMessage = error.response.data.detail
+            } else if (error.response?.data?.error) {
+                errorMessage = error.response.data.error
+            } else if (error.response?.status === 409) {
+                errorMessage = error.response?.data?.message || "File already exists"
+            } else if (error.response?.status === 400) {
+                // Bad request - likely format not supported
+                errorMessage = error.response?.data?.detail || error.response?.data?.error || "Invalid file format"
+            } else if (error.message) {
+                errorMessage = error.message
             }
-            throw new Error("Failed to upload files. Please check your connection and try again.")
+
+            // Format error message for UI
+            if (errorMessage.includes('not supported') || errorMessage.includes('format')) {
+                errorMessage = `Format not supported: ${errorMessage}`
+            } else if (errorMessage.includes('already exists') || errorMessage.includes('duplicate')) {
+                errorMessage = `File already exists: ${errorMessage}`
+            }
+
+            throw new Error(errorMessage)
         }
     },
 
@@ -267,7 +300,7 @@ export const api = {
                         onProgress(docId, 100)
                     }
                 } catch (err) {
-                    console.error(`Error fetching document ${docId}:`, err)
+                    logger.error(`Error fetching document ${docId}`, "API", err as Error, { documentId: docId, endpoint: '/documents' })
                 }
             }
 
@@ -279,7 +312,7 @@ export const api = {
 
             return uploadedDocs
         } catch (error: any) {
-            console.error("Error in bulk upload:", error)
+            logger.error("Error in bulk upload", "API", error as Error, { endpoint: '/upload/bulk' })
             throw new Error(error.response?.data?.detail || "Failed to upload files. Please try again.")
         }
     },
@@ -289,7 +322,7 @@ export const api = {
             const res = await axios.get(`${API_URL}/documents/folders/list`)
             return res.data
         } catch (error) {
-            console.error("Error fetching folders:", error)
+            logger.warn("Error fetching folders", "API", { endpoint: '/documents/folders/list', error })
             return { folders: [] }
         }
     },
@@ -300,7 +333,7 @@ export const api = {
             const res = await axios.get(`${API_URL}/documents`, { params })
             return res.data
         } catch (error) {
-            console.error("Error fetching documents by folder:", error)
+            logger.error("Error fetching documents by folder", "API", error as Error, { folder, endpoint: '/documents' })
             throw new Error("Failed to fetch documents.")
         }
     },
@@ -310,7 +343,7 @@ export const api = {
             const res = await axios.get(`${API_URL}/files/${filename}`)
             return res.data
         } catch (error) {
-            console.error(`Error fetching file content ${filename}:`, error)
+            logger.error(`Error fetching file content ${filename}`, "API", error as Error, { filename, endpoint: `/files/${filename}` })
             throw new Error("Failed to load file content.")
         }
     },
@@ -321,7 +354,7 @@ export const api = {
             const res = await axios.delete(`${API_URL}/documents/folders/${encodedPath}`)
             return res.data
         } catch (error: any) {
-            console.error(`Error deleting folder ${folderPath}:`, error)
+            logger.error(`Error deleting folder ${folderPath}`, "API", error as Error, { folderPath, endpoint: `/documents/folders/${encodeURIComponent(folderPath)}` })
             const errorMsg = error.response?.data?.detail || error.message || "Failed to delete folder."
             throw new Error(errorMsg)
         }
@@ -336,7 +369,7 @@ export const api = {
             const res = await axios.put(`${API_URL}/documents/folders/${encodeURIComponent(folderPath)}/move`, formData)
             return res.data
         } catch (error) {
-            console.error(`Error moving folder ${folderPath}:`, error)
+            logger.error(`Error moving folder ${folderPath}`, "API", error as Error, { folderPath, newFolderPath, endpoint: `/documents/folders/${encodeURIComponent(folderPath)}/move` })
             throw new Error("Failed to move folder.")
         }
     },
@@ -355,9 +388,13 @@ export const api = {
             })
             return res.data
         } catch (error: any) {
-            console.error(`Error creating folder ${folderName}:`, error)
-            console.error("Error response:", error.response?.data)
-            console.error("Error status:", error.response?.status)
+            logger.error(`Error creating folder ${folderName}`, "API", error as Error, {
+                folderName,
+                parentFolder,
+                endpoint: '/documents/folders',
+                responseData: error.response?.data,
+                status: error.response?.status
+            })
             const errorMsg = error.response?.data?.detail || error.response?.data?.message || error.message || "Failed to create folder."
             throw new Error(errorMsg)
         }
@@ -377,7 +414,7 @@ export const api = {
             const res = await axios.get(`${API_URL}/documents/tags`)
             return res.data
         } catch (error: any) {
-            console.error("Error fetching tags:", error)
+            logger.error("Error fetching tags", "API", error as Error, { endpoint: '/documents/tags' })
             const errorMsg = error.response?.data?.detail || error.message || "Failed to fetch tags."
             throw new Error(errorMsg)
         }
@@ -396,7 +433,7 @@ export const api = {
             const res = await axios.get(`${API_URL}/documents/tags/${encodedTag}`)
             return res.data
         } catch (error: any) {
-            console.error(`Error fetching documents by tag "${tag}":`, error)
+            logger.error(`Error fetching documents by tag "${tag}"`, "API", error as Error, { tag, endpoint: `/documents/tags/${encodeURIComponent(tag)}` })
             const errorMsg = error.response?.data?.detail || error.message || "Failed to fetch documents by tag."
             throw new Error(errorMsg)
         }
@@ -416,7 +453,7 @@ export const api = {
             const res = await axios.get(`${API_URL}/documents/${docId}/fields`)
             return res.data
         } catch (error: any) {
-            console.error(`Error fetching extracted fields for document ${docId}:`, error)
+            logger.error(`Error fetching extracted fields for document ${docId}`, "API", error as Error, { documentId: docId, endpoint: `/documents/${docId}/fields` })
             const errorMsg = error.response?.data?.detail || error.message || "Failed to fetch extracted fields."
             throw new Error(errorMsg)
         }
@@ -460,11 +497,11 @@ export const api = {
             const params: Record<string, any> = { q: query }
             if (limit !== undefined) params.limit = limit
             if (minSimilarity !== undefined) params.min_similarity = minSimilarity
-            
+
             const res = await axios.get(`${API_URL}/documents/search`, { params })
             return res.data
         } catch (error: any) {
-            console.error(`Error in semantic search for query "${query}":`, error)
+            logger.error(`Error in semantic search for query "${query}"`, "API", error as Error, { query, endpoint: '/search/semantic' })
             const errorMsg = error.response?.data?.detail || error.message || "Failed to perform semantic search."
             throw new Error(errorMsg)
         }

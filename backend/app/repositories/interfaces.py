@@ -6,6 +6,9 @@ from abc import ABC, abstractmethod
 from typing import List, Optional
 from ..domain.entities import Document, Folder
 from ..domain.value_objects import FileChecksum, FolderPath
+from ..core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class IDocumentRepository(ABC):
     """

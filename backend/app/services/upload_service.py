@@ -31,6 +31,9 @@ from .upload_processor import UploadProcessor
 from .upload_queue import UploadQueueManager, UploadTask, UploadStatus
 from ..utils.document_utils import create_document_metadata, normalize_folder_name
 from ..core.config import UPLOAD_DIR
+from ..core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class UploadService:
@@ -118,7 +121,7 @@ class UploadService:
             result = await service.upload_single_file(file, folder="Invoices")
             if result["status"] == "success":
                 doc = result["document"]
-                print(f"Uploaded: {doc['filename']}")
+                logger.info(f"Uploaded: {doc['filename']}")
         
         Note:
             - ZIP files are NOT saved - only extracted files are processed

@@ -3,6 +3,9 @@ Tag extraction utilities - Extract keywords and tags from document content.
 """
 from typing import List, Optional, Dict
 import re
+from ..core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # Common stop words to filter out
 _STOP_WORDS = {

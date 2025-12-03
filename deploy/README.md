@@ -155,8 +155,8 @@ curl http://localhost:8000/ready
 ### Scaling Issues
 ```bash
 kubectl get hpa
-kubectl describe hpa docvault-backend-hpa
-```
+  kubectl describe hpa docvault-backend-hpa
+  ```
 
 ## Support
 

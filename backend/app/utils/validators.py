@@ -2,6 +2,9 @@
 Validation utilities - Pure validation functions.
 """
 from typing import List
+from ..core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 def validate_folder_name(name: str) -> None:
     """
@@ -35,4 +38,3 @@ def validate_filename(filename: str) -> None:
     
     if not clean_name:
         raise ValueError("Invalid filename")
-

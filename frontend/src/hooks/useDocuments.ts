@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Document } from '../types'
 import { api } from '../services/api'
 import { calculateFileChecksum } from '../utils/checksum'
+import { logger } from '../utils/logger'
 
 export function useDocuments() {
     const [documents, setDocuments] = useState<Document[]>([])
@@ -38,7 +39,7 @@ export function useDocuments() {
                 return updated || prevSelected
             })
         } catch (err) {
-            console.error("Failed to fetch documents", err)
+            logger.error("Failed to fetch documents", "useDocuments", err as Error)
         } finally {
             setIsLoading(false)
         }
@@ -58,8 +59,22 @@ export function useDocuments() {
         const tempDocIds: string[] = []
         const duplicateFiles: string[] = []
 
-        // Check for duplicates before uploading
+        // Check for unsupported files before uploading
         const fileArray = Array.from(files)
+        const { getUnsupportedFiles } = await import('../utils/supportedFormats')
+        const unsupported = getUnsupportedFiles(fileArray)
+
+        if (unsupported.length > 0) {
+            const unsupportedNames = unsupported.map(f => f.name).join(', ')
+            setUploadError(
+                `Unsupported file format(s): ${unsupportedNames}. ` +
+                `Please upload supported formats only.`
+            )
+            setIsUploading(false)
+            return
+        }
+
+        // Check for duplicates before uploading
         for (const file of fileArray) {
             try {
                 const checksum = await calculateFileChecksum(file)
@@ -69,7 +84,7 @@ export function useDocuments() {
                     continue
                 }
             } catch (err) {
-                console.error(`Error checking duplicate for ${file.name}:`, err)
+                logger.warn(`Error checking duplicate for ${file.name}`, "useDocuments", { filename: file.name, error: err })
                 // Continue with upload if check fails
             }
         }
@@ -142,7 +157,7 @@ export function useDocuments() {
                 // For ZIP files, there may be more docs than temp IDs
                 // Use the doc's own ID for progress tracking
                 const docId = doc.id
-                
+
                 // Try to find matching temp ID if available
                 if (index < tempDocIds.length) {
                     const tempId = tempDocIds[index]
@@ -161,10 +176,10 @@ export function useDocuments() {
 
                 setDocuments(prev => {
                     // Remove temporary document if it exists, then add/update real one
-                    const filtered = index < tempDocIds.length 
+                    const filtered = index < tempDocIds.length
                         ? prev.filter(d => d.id !== tempDocIds[index])
                         : prev
-                    
+
                     const exists = filtered.find(d => d.id === docId)
                     if (exists) {
                         return filtered.map(d =>
@@ -176,7 +191,7 @@ export function useDocuments() {
                     return [...filtered, { ...doc, status: 'processing' as const, uploadProgress: 100 }]
                 })
             })
-            
+
             // Clean up any remaining temp IDs that weren't matched
             tempDocIds.forEach((tempId, index) => {
                 if (index >= uploadedDocs.length) {
@@ -194,13 +209,31 @@ export function useDocuments() {
 
             await fetchDocuments()
         } catch (err: any) {
-            console.error("Upload failed", err)
-            // Handle duplicate error specifically
-            if (err.response?.status === 409 || err.message?.includes('already exists') || err.message?.startsWith('DUPLICATE:')) {
-                const duplicateMsg = err.response?.data?.detail || err.message?.replace('DUPLICATE: ', '') || 'File already exists'
+            logger.error("Upload failed", "useDocuments", err, {
+                fileCount: files.length,
+                hasFolder: !!folder
+            })
+
+            // Extract error message from response
+            let errorMessage = "Failed to upload files. Please try again."
+
+            if (err.response?.data?.detail) {
+                errorMessage = err.response.data.detail
+            } else if (err.response?.data?.error) {
+                errorMessage = err.response.data.error
+            } else if (err.message) {
+                errorMessage = err.message
+            }
+
+            // Handle different error types with appropriate styling
+            if (err.response?.status === 409 || errorMessage.includes('already exists') || errorMessage.startsWith('DUPLICATE:')) {
+                const duplicateMsg = errorMessage.replace('DUPLICATE: ', '')
                 setUploadError(duplicateMsg)
+            } else if (errorMessage.includes('not supported') || errorMessage.includes('Format not supported')) {
+                // Format not supported error - show prominently
+                setUploadError(`⚠️ ${errorMessage}`)
             } else {
-                setUploadError("Failed to upload files.")
+                setUploadError(errorMessage)
             }
             // Remove temporary documents on error
             setDocuments(prev => prev.filter(d => !tempDocIds.includes(d.id)))
@@ -269,7 +302,7 @@ export function useDocuments() {
             // This ensures the tree view is updated with the latest state
             await fetchDocuments()
         } catch (err: any) {
-            console.error("Delete folder failed", err)
+            logger.error("Delete folder failed", "useDocuments", err as Error, { folderPath })
             const errorMsg = err.response?.data?.detail || err.message || "Failed to delete folder"
             alert(errorMsg)
             throw err // Re-throw so caller can handle it
@@ -293,7 +326,7 @@ export function useDocuments() {
             // Show success message
             alert(`Folder "${result.folder_path}" created successfully!`)
         } catch (err: any) {
-            console.error("Create folder failed in hook", err)
+            logger.error("Create folder failed in hook", "useDocuments", err as Error, { folderName, parentFolder })
             const errorMsg = err.message || "Failed to create folder"
             alert(`Error: ${errorMsg}`)
             throw err

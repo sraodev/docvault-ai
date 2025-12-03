@@ -6,6 +6,9 @@ from typing import List
 from ..domain.entities import Document, Folder
 from ..domain.value_objects import FolderPath
 from .dto import DocumentDTO, FolderDTO
+from ..core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class DocumentMapper:
     """Maps between Document entity and DocumentDTO."""

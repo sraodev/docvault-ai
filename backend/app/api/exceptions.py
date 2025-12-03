@@ -3,6 +3,9 @@ Custom exceptions for API layer.
 Separates business exceptions from HTTP exceptions.
 """
 from fastapi import HTTPException, status
+from ..core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class DocumentNotFoundError(Exception):
     """Raised when document is not found."""

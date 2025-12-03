@@ -6,6 +6,9 @@ from .base import FileStorageInterface
 from .local_storage import LocalFileStorage
 from .s3_storage import S3FileStorage
 from .factory import FileStorageFactory
+from ...core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # Conditionally import Supabase only if needed
 import os

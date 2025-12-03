@@ -8,6 +8,9 @@ import urllib.parse
 
 from .dependencies import get_db_service
 from ..utils.document_utils import normalize_folder_name
+from ..core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -121,7 +124,7 @@ async def delete_folder(folder_path: str):
                     from pathlib import Path
                     await file_service.delete_file(Path(doc["markdown_path"]))
             except Exception as file_err:
-                print(f"Error deleting file for folder '{folder_path}': {file_err}")
+                logger.error(f"Error deleting file for folder '{folder_path}': {file_err}")
         
         # Delete from database
         deleted_count = await db_service.delete_folder(folder_path)
