@@ -280,6 +280,18 @@ async def process_document(doc_id: str, background_tasks: BackgroundTasks):
             "status": "completed"
         }
     
+    # Allow retry for failed documents
+    if current_status == "failed":
+        error_info = doc.get("error") or doc.get("ai_error") or "Unknown error"
+        logger.info(f"Retrying failed document {doc_id} (previous error: {error_info})")
+        # Clear error flags and reset status to ready for retry
+        await db_service.update_document(doc_id, {
+            "status": "ready",
+            "error": None,
+            "ai_error": None,
+            "ai_processing_failed": False
+        })
+    
     # Get file path from document metadata
     file_path_str = doc.get("file_path")
     if not file_path_str:
@@ -447,4 +459,57 @@ async def get_missing_summaries(limit: Optional[int] = None):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get missing summaries: {str(e)}")
+
+
+@router.post("/documents/{doc_id}/recover-db-write")
+async def recover_db_write(doc_id: str):
+    """
+    Recover database write for a document where AI processing succeeded but DB write failed.
+    
+    This endpoint attempts to retry the database write using stored AI results,
+    avoiding the need to re-run expensive AI processing.
+    
+    Args:
+        doc_id: Document ID to recover
+        
+    Returns:
+        dict: Recovery status
+        
+    Raises:
+        HTTPException: 404 if document not found
+                      400 if no recovery data available
+                      500 if recovery fails
+    """
+    db_service = get_db_service()
+    processing_service = get_document_processing_service()
+    
+    # Check if document exists
+    doc = await db_service.get_document(doc_id)
+    if not doc:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Document with ID '{doc_id}' not found"
+        )
+    
+    # Check if document has pending AI results
+    if not doc.get("ai_results_pending") and not doc.get("db_write_failed"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Document {doc_id} does not have pending AI results for recovery"
+        )
+    
+    # Attempt recovery
+    success = await processing_service.retry_db_write(doc_id)
+    
+    if success:
+        return {
+            "message": "Database write recovery successful",
+            "status": "completed",
+            "doc_id": doc_id
+        }
+    else:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to recover database write for document {doc_id}. AI results may have been lost."
+        )
 
